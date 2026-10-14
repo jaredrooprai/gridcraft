@@ -53,6 +53,14 @@ pub struct Tokens {
 }
 
 impl Tokens {
+    /// The selection drawn in red, while Num Lock makes the keypad navigate.
+    pub fn keypad_selection(mut self) -> Tokens {
+        let [r, g, b, _] = self.danger.to_srgba_unmultiplied();
+        self.sel_border = self.danger;
+        self.sel_fill = Color32::from_rgba_unmultiplied(r, g, b, self.sel_fill.a());
+        self
+    }
+
     pub fn light() -> Tokens {
         Tokens {
             dark: false,

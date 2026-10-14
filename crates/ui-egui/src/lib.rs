@@ -209,6 +209,17 @@ pub struct Perf {
     last: f64,
 }
 
+/// A numeric keypad key while Num Lock makes the keypad navigate (see [`SheetApp::keypad_input`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeypadKey {
+    Left,
+    Right,
+    Up,
+    Down,
+    /// 7: edit the active cell.
+    Edit,
+}
+
 pub struct SheetApp {
     pub session: Session,
     pub ui: UiState,
@@ -227,6 +238,8 @@ pub struct SheetApp {
     print_feedback_seen: Option<printing::Feedback>,
     /// Synthetic input from agents, one batch per frame (drags need several frames).
     pub synthetic: std::collections::VecDeque<Vec<egui::Event>>,
+    /// Num Lock turned the numeric keypad into navigation keys ([`SheetApp::keypad_input`]).
+    pub keypad_arrows: bool,
     pub control_rx: Option<std::sync::mpsc::Receiver<ControlRequest>>,
     pub grid: grid::GridState,
     pub perf: Perf,
@@ -282,6 +295,7 @@ impl SheetApp {
             printing: Default::default(),
             print_feedback_seen: None,
             synthetic: Default::default(),
+            keypad_arrows: false,
             control_rx: None,
             grid: grid::GridState {
                 last_border: "bottom".into(),
@@ -1081,6 +1095,39 @@ impl SheetApp {
         }
         if self.session.active().is_none() {
             self.session.new_workbook();
+        }
+    }
+
+    /// Keypad keys in Num Lock arrow mode, which the desktop app reads from the window system
+    /// (egui can't tell keypad digits from the number row). 4, 8, 6 and 2 press the arrow keys,
+    /// with the modifiers held so Shift extends the selection; 7 edits the active cell (F2)
+    /// unless a cell is being edited already.
+    /// `held` is the modifier state before this frame's events (`ctx.input(|i| i.modifiers)`);
+    /// each key comes with the modifier keys physically down, which the modifier state can get
+    /// wrong (keypads send fake Shift or Command releases before keypad keys).
+    pub fn keypad_input(&mut self, keys: &[(KeypadKey, egui::Modifiers)], held: egui::Modifiers, raw: &mut egui::RawInput) {
+        let modifiers = raw
+            .events
+            .iter()
+            .rev()
+            .find_map(|e| match e {
+                egui::Event::ModifiersChanged(m) => Some(*m),
+                _ => None,
+            })
+            .unwrap_or(held);
+        for (k, down) in keys {
+            let modifiers = modifiers | *down;
+            let key = match k {
+                KeypadKey::Left => egui::Key::ArrowLeft,
+                KeypadKey::Right => egui::Key::ArrowRight,
+                KeypadKey::Up => egui::Key::ArrowUp,
+                KeypadKey::Down => egui::Key::ArrowDown,
+                KeypadKey::Edit if self.editor.is_some() => continue,
+                KeypadKey::Edit => egui::Key::F2,
+            };
+            for pressed in [true, false] {
+                raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers });
+            }
         }
     }
 

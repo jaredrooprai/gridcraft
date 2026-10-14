@@ -210,13 +210,21 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
         }
         // Arrow keys: autocomplete navigation, point mode, or (Enter mode) commit and move.
         let arrows = ui.input(|i| {
+            // Modifiers from the arrow key's own event too: keypad arrows (Num Lock mode) carry
+            // a Shift the modifier state can miss.
+            let arrow_mods = i.events.iter().find_map(|e| match e {
+                egui::Event::Key { key: Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight, pressed: true, modifiers, .. } => {
+                    Some(*modifiers)
+                }
+                _ => None,
+            });
             (
                 i.key_pressed(Key::ArrowUp),
                 i.key_pressed(Key::ArrowDown),
                 i.key_pressed(Key::ArrowLeft),
                 i.key_pressed(Key::ArrowRight),
-                i.modifiers.shift,
-                i.modifiers.command,
+                i.modifiers.shift || arrow_mods.is_some_and(|m| m.shift),
+                i.modifiers.command || arrow_mods.is_some_and(|m| m.command),
             )
         });
         let (up, down, left, right, ashift, acmd) = arrows;

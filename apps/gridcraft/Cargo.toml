@@ -42,6 +42,9 @@ muda = { version = "0.21", default-features = false }
 # by PdfCraft and PhotoCraft) registers the handler (Objective-C interop needs unsafe, which our
 # workspace forbids) behind a safe API. Pinned exactly: review the diff before bumping.
 fmv-macos-events = "=0.1.0"
+# keypad.rs: Num Lock keypad navigation reads keys from winit before eframe (egui drops Num Lock
+# and can't tell keypad digits from the number row). The version eframe already uses.
+winit = { version = "=0.30.13", default-features = false }
 
 # tests/mac_menu_appkit.rs: reads AppKit's menu bar back. Already in Cargo.lock (muda, winit);
 # pinned exactly to the same versions.

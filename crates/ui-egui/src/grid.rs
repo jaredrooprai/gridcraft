@@ -1607,6 +1607,7 @@ pub(crate) fn paint_selection(
     rows: (u32, u32),
     cols: (u32, u32),
 ) {
+    let t = &if app.keypad_arrows { t.keypad_selection() } else { *t };
     // Fill all areas except the active cell.
     for rect in selection_fill_where(geo, sh, sel, outline, |r| range_in_pane(*r, rows, cols)) {
         p.rect_filled(rect, 0.0, t.sel_fill);
@@ -2716,7 +2717,9 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let clip = ui.clip_rect().intersect(quadrant);
     let painter = ui.painter().with_clip_rect(clip);
     painter.rect_filled(erect, 0.0, fill);
-    painter.rect_stroke(erect.expand(1.0), 0.0, Stroke::new(2.0, Tokens::get(ui.ctx()).sel_border), StrokeKind::Middle);
+    let t = Tokens::get(ui.ctx());
+    let border = if app.keypad_arrows { t.keypad_selection().sel_border } else { t.sel_border };
+    painter.rect_stroke(erect.expand(1.0), 0.0, Stroke::new(2.0, border), StrokeKind::Middle);
     let id = egui::Id::new("gridcraft.cell_editor");
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(erect.shrink2(vec2(2.0, 1.0))));
     child.set_clip_rect(clip);

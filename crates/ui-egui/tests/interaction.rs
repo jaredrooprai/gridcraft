@@ -943,3 +943,46 @@ fn control_r_fills_the_first_cells_formula_across_the_selection() {
     }
 }
 
+#[test]
+fn num_lock_keypad_moves_like_the_arrows_and_7_edits() {
+    use gridcraft_ui_egui::KeypadKey;
+    let mut s = blank();
+    s.execute("cell.set", json!({"cell": "C3", "input": "42"})).unwrap();
+    s.execute("selection.set", json!({"cell": "B2"})).unwrap();
+    let mut h = harness(s);
+    let press = |h: &mut egui_kittest::Harness<'static, SheetApp>, keys: &[KeypadKey], m: Modifiers| {
+        let keys: Vec<(KeypadKey, Modifiers)> = keys.iter().map(|k| (*k, m)).collect();
+        let mut raw = egui::RawInput::default();
+        h.state_mut().keypad_input(&keys, Modifiers::NONE, &mut raw);
+        h.input_mut().events.extend(raw.events);
+        h.run_steps(2);
+    };
+    let active = |h: &egui_kittest::Harness<'static, SheetApp>| h.state().session.active().map(|d| d.selection.active.a1());
+    press(&mut h, &[KeypadKey::Down], Modifiers::NONE);
+    press(&mut h, &[KeypadKey::Right], Modifiers::NONE);
+    assert_eq!(active(&h).as_deref(), Some("C3"));
+    press(&mut h, &[KeypadKey::Up, KeypadKey::Left], Modifiers::NONE);
+    assert_eq!(active(&h).as_deref(), Some("B2"));
+    press(&mut h, &[KeypadKey::Down, KeypadKey::Right], Modifiers::NONE);
+    // 7 edits the cell, keeping what's in it.
+    press(&mut h, &[KeypadKey::Edit], Modifiers::NONE);
+    assert_eq!(h.state().editor.as_ref().map(|e| (e.cell.a1(), e.text.clone())), Some(("C3".to_string(), "42".to_string())));
+    // While editing, 7 does nothing more.
+    press(&mut h, &[KeypadKey::Edit], Modifiers::NONE);
+    assert_eq!(h.state().editor.as_ref().map(|e| e.text.clone()).as_deref(), Some("42"));
+    h.state_mut().cancel_edit();
+    // Shift held extends the selection, even though the keypad sent a fake Shift release so
+    // the modifier state says Shift is up.
+    h.input_mut().events.push(Event::ModifiersChanged(Modifiers::NONE));
+    press(&mut h, &[KeypadKey::Right], Modifiers::SHIFT);
+    press(&mut h, &[KeypadKey::Down], Modifiers::SHIFT);
+    let sel = h.state().session.active().map(|d| d.selection.current().a1());
+    assert_eq!(sel.as_deref(), Some("C3:D4"));
+    // Command held jumps like Cmd+arrow: from C2 to the data in C3, then past it to the end.
+    press(&mut h, &[KeypadKey::Up], Modifiers::NONE);
+    assert_eq!(active(&h).as_deref(), Some("C2"));
+    press(&mut h, &[KeypadKey::Down], Modifiers::MAC_CMD | Modifiers::COMMAND);
+    assert_eq!(active(&h).as_deref(), Some("C3"));
+    press(&mut h, &[KeypadKey::Down], Modifiers::MAC_CMD | Modifiers::COMMAND);
+    assert_eq!(active(&h).as_deref(), Some("C1048576"));
+}
