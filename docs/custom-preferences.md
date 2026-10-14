@@ -244,4 +244,16 @@ Test: `cmd_s_picks_up_the_format_for_the_next_cell_clicked_or_moved_to`.
 ## Keeping this file current
 
 When a new preference lands on this fork, add a section here in the same shape: the behaviour,
+## 13. Frozen panes keep their gridlines when scrolled (fix)
+
+This is a bug fix rather than a preference; check whether upstream has fixed it before porting.
+With columns frozen, scrolling right left the frozen columns without row gridlines (they looked
+white). Frozen rows lost their column gridlines when scrolling down. The cause: each pane drew its
+lines out to the start of the next column or row, which past a freeze is in the scrolled pane. The
+pane's far edges now come from its own last column and row.
+
+Where it lived: `gridlines()` (used by `paint_quadrant`) in `crates/ui-egui/src/grid.rs`.
+
+Test: `frozen_panes_keep_their_gridlines_when_scrolled`.
+
 where it lived, its tests and its commit.

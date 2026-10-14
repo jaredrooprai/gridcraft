@@ -1020,6 +1020,33 @@ fn mirror_shape(shape: &mut egui::Shape, axis: f32) {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// The gridlines of one pane: a line at each column's and row's leading edge, and one after the
+/// last. The far edges come from the last row and column, not the next one's start: past a freeze
+/// the next one is in the scrolled pane, which can be anywhere.
+fn gridlines(geo: &Geo, sh: &Sheet, (r0, r1): (u32, u32), (c0, c1): (u32, u32)) -> Vec<[Pos2; 2]> {
+    let z = geo.z;
+    let top = geo.y(sh, r0);
+    let bottom = geo.y(sh, r1) + sh.row_height(r1) * z;
+    let left = geo.x(sh, c0);
+    let right = geo.x(sh, c1) + sh.col_width(c1) * z;
+    let mut lines = Vec::new();
+    for c in c0..=c1.saturating_add(1) {
+        if c <= c1 && sh.col_width(c) == 0.0 {
+            continue;
+        }
+        let x = if c <= c1 { geo.x(sh, c) } else { right }.round() - 0.5;
+        lines.push([pos2(x, top), pos2(x, bottom)]);
+    }
+    for r in r0..=r1.saturating_add(1) {
+        if r <= r1 && sh.row_height(r) == 0.0 {
+            continue;
+        }
+        let y = if r <= r1 { geo.y(sh, r) } else { bottom }.round() - 0.5;
+        lines.push([pos2(left, y), pos2(right, y)]);
+    }
+    lines
+}
+
 pub(crate) fn paint_quadrant(
     p: &Painter,
     geo: &Geo,
@@ -1040,23 +1067,8 @@ pub(crate) fn paint_quadrant(
     // Gridlines.
     if sh.show_gridlines {
         let stroke = Stroke::new(1.0, t.gridline);
-        let top = geo.y(sh, r0);
-        let bottom = geo.y(sh, r1 + 1);
-        let left = geo.x(sh, c0);
-        let right = geo.x(sh, c1 + 1);
-        for c in c0..=c1 + 1 {
-            if c <= c1 && sh.col_width(c) == 0.0 {
-                continue;
-            }
-            let x = geo.x(sh, c).round() - 0.5;
-            p.line_segment([pos2(x, top), pos2(x, bottom)], stroke);
-        }
-        for r in r0..=r1 + 1 {
-            if r <= r1 && sh.row_height(r) == 0.0 {
-                continue;
-            }
-            let y = geo.y(sh, r).round() - 0.5;
-            p.line_segment([pos2(left, y), pos2(right, y)], stroke);
+        for line in gridlines(geo, sh, rows, cols) {
+            p.line_segment(line, stroke);
         }
     }
     // Merged areas: blank them (no inner gridlines) and paint as one cell.
@@ -3619,6 +3631,33 @@ mod pane_tests {
         let handle = geo.range_rect(&sh, rng(5, 3, 6, 4)).right_bottom();
         assert!(handle.x < split.x);
         assert!(!geo.range_panes(rng(6, 4, 6, 4)).iter().any(|r| r.contains(handle)));
+    }
+
+    #[test]
+    fn frozen_panes_keep_their_gridlines_when_scrolled() {
+        let mut sh = Sheet::new("S");
+        let mut geo = frozen_geo(&mut sh);
+        geo.scroll.y = 5.0 * sh.default_row_height + 3.0;
+        let geo = Geo::new(&sh, geo.rect, geo.scroll);
+        // Horizontal and vertical gridline lengths drawn for one pane.
+        let lines = |rows: (u32, u32), cols: (u32, u32)| {
+            let (mut h, mut v) = (Vec::new(), Vec::new());
+            for [a, b] in gridlines(&geo, &sh, rows, cols) {
+                if a.y == b.y {
+                    h.push(b.x - a.x);
+                } else {
+                    v.push(b.y - a.y);
+                }
+            }
+            (h, v)
+        };
+        let (frozen_w, frozen_h) = (geo.frozen_w, geo.frozen_h);
+        // The frozen columns' row lines span both columns, and the frozen rows' column lines both
+        // rows, however far the sheet scrolled.
+        let (h, _) = lines((7, 20), (0, 1));
+        assert!(!h.is_empty() && h.iter().all(|w| (w - frozen_w).abs() < 0.5), "{h:?}");
+        let (_, v) = lines((0, 1), (5, 10));
+        assert!(!v.is_empty() && v.iter().all(|w| (w - frozen_h).abs() < 0.5), "{v:?}");
     }
 }
 
