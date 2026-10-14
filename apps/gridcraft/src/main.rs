@@ -70,10 +70,11 @@ impl eframe::App for App {
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.0.ui(ui);
-        // In a dialog the keypad types digits, not Num Lock navigation (keypad.rs).
+        // While a cell is edited or a dialog is open the keypad types digits, not Num Lock
+        // navigation (keypad.rs).
         #[cfg(target_os = "macos")]
         if let Ok(mut k) = self.3.lock() {
-            k.dialog = self.0.dialog.is_some();
+            k.typing = self.0.editor.is_some() || self.0.dialog.is_some();
         }
     }
     fn on_exit(&mut self) {

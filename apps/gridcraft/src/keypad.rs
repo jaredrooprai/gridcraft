@@ -6,7 +6,8 @@
 //! Lock toggles a mode in which keypad 4, 8, 6 and 2 move like the arrow keys and 7 edits the
 //! active cell; the keys are swallowed and handed to the app as [`KeypadKey`]s, which
 //! [`gridcraft_ui_egui::SheetApp::keypad_input`] turns into input on the next frame. Every other
-//! key types as usual, and in a dialog the keypad types its digits.
+//! key types as usual, and while a cell is being edited (after 7) or a dialog is open the keypad
+//! types its digits.
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -26,8 +27,10 @@ pub struct Shared {
     pub on: bool,
     pub keys: Vec<(KeypadKey, egui::Modifiers)>,
     pub ctx: Option<egui::Context>,
-    /// A dialog is open: the keypad types its digits there (Zoom's Custom box) instead of moving.
-    pub dialog: bool,
+    /// A cell is being edited or a dialog is open: the keypad types its digits there instead of
+    /// moving. The app sets it after each frame; 7 sets it at once, so a digit typed right after
+    /// 7 goes into the cell.
+    pub typing: bool,
 }
 
 pub type Handle = Arc<Mutex<Shared>>;
@@ -57,7 +60,7 @@ impl<A> Keypad<A> {
     }
 
     /// Whether a key press or release is taken: Num Lock, and the navigation keys in Num Lock
-    /// mode (outside dialogs).
+    /// mode (unless typing).
     fn route(&mut self, code: KeyCode, pressed: bool, repeat: bool) -> bool {
         if is_modifier(code) {
             if pressed {
@@ -74,10 +77,13 @@ impl<A> Keypad<A> {
             if !repeat {
                 s.on = !s.on;
             }
-        } else if let Some(k) = navigation(code).filter(|_| s.on && !s.dialog) {
+        } else if let Some(k) = navigation(code).filter(|_| s.on && !s.typing) {
             // Held arrows repeat; held 7 edits once.
             if !(repeat && k == KeypadKey::Edit) {
                 s.keys.push((k, self.held_modifiers()));
+            }
+            if k == KeypadKey::Edit {
+                s.typing = true;
             }
         } else {
             return false;
@@ -190,7 +196,6 @@ mod tests {
         for code in [KeyCode::KeyA, KeyCode::Digit2, KeyCode::Numpad5, KeyCode::Backspace, KeyCode::Enter, KeyCode::ShiftLeft] {
             assert!(!taken(&mut k, code), "{code:?}");
         }
-        assert!(taken(&mut k, KeyCode::Numpad7));
         // Shift and Command held (their fake releases don't matter): the arrows carry them.
         assert!(!k.route(KeyCode::ShiftLeft, true, false));
         assert!(taken(&mut k, KeyCode::Numpad6));
@@ -198,19 +203,28 @@ mod tests {
         assert!(!k.route(KeyCode::SuperLeft, true, false));
         assert!(taken(&mut k, KeyCode::Numpad2));
         assert!(!k.route(KeyCode::SuperLeft, false, false));
-        let keys = shared.lock().map(|mut s| std::mem::take(&mut s.keys));
+        // 7 edits; then the keypad types digits into the cell until the app says the edit is over.
+        assert!(taken(&mut k, KeyCode::Numpad7));
+        assert!(!taken(&mut k, KeyCode::Numpad2));
+        assert!(!taken(&mut k, KeyCode::Numpad4));
+        assert!(!taken(&mut k, KeyCode::Numpad7));
+        let keys = shared.lock().map(|mut s| {
+            s.typing = false;
+            std::mem::take(&mut s.keys)
+        });
         let cmd = egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND;
         assert_eq!(
             keys.ok(),
-            Some(vec![(KeypadKey::Edit, egui::Modifiers::NONE), (KeypadKey::Right, egui::Modifiers::SHIFT), (KeypadKey::Down, cmd)])
+            Some(vec![(KeypadKey::Right, egui::Modifiers::SHIFT), (KeypadKey::Down, cmd), (KeypadKey::Edit, egui::Modifiers::NONE)])
         );
-        // A dialog is open: the keypad types digits into it.
+        assert!(taken(&mut k, KeyCode::Numpad2));
+        // A dialog is open: the keypad types digits into it too.
         if let Ok(mut s) = shared.lock() {
-            s.dialog = true;
+            s.typing = true;
         }
         assert!(!taken(&mut k, KeyCode::Numpad2));
         if let Ok(mut s) = shared.lock() {
-            s.dialog = false;
+            s.typing = false;
         }
         // Off again.
         assert!(taken(&mut k, KeyCode::NumLock));

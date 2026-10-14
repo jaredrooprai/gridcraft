@@ -2402,6 +2402,17 @@ fn chart_design(app: &mut SheetApp, ui: &mut Ui) {
     }
 }
 
+/// Whether the selection is whole rows (`Some(true)`) or whole columns (`Some(false)`). The whole
+/// sheet is neither, so Cmd+- there asks first instead of deleting everything.
+fn whole_lines(app: &SheetApp) -> Option<bool> {
+    let r = app.session.active()?.selection.current();
+    match (r.is_full_rows(), r.is_full_cols()) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        _ => None,
+    }
+}
+
 /// Command-key shortcuts when the grid has focus.
 pub fn shortcut(app: &mut SheetApp, key: Key, m: Modifiers) {
     let shift = m.shift;
@@ -2452,14 +2463,24 @@ pub fn shortcut(app: &mut SheetApp, key: Key, m: Modifiers) {
         Key::Num9 => Some(("home.hideRows", json!({}))),
         Key::Num0 if shift => Some(("home.unhideColumns", json!({}))),
         Key::Num0 => Some(("home.hideColumns", json!({}))),
-        Key::Minus => {
-            app.open_dialog("deleteCells", json!({}));
-            None
-        }
-        Key::Plus | Key::Equals if shift => {
-            app.open_dialog("insertCells", json!({}));
-            None
-        }
+        // With whole rows or columns selected, Cmd+- deletes them and Cmd++ (also Cmd+=) inserts as
+        // many before them, as Excel does; otherwise the Delete / Insert dialog asks how to shift.
+        Key::Minus => match whole_lines(app) {
+            Some(true) => Some(("home.deleteRows", json!({}))),
+            Some(false) => Some(("home.deleteColumns", json!({}))),
+            None => {
+                app.open_dialog("deleteCells", json!({}));
+                None
+            }
+        },
+        Key::Plus | Key::Equals if shift || whole_lines(app).is_some() => match whole_lines(app) {
+            Some(true) => Some(("home.insertRows", json!({}))),
+            Some(false) => Some(("home.insertColumns", json!({}))),
+            None => {
+                app.open_dialog("insertCells", json!({}));
+                None
+            }
+        },
         Key::Semicolon => {
             // Insert today's date.
             let text = app

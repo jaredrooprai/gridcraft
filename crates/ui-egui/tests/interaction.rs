@@ -986,3 +986,33 @@ fn num_lock_keypad_moves_like_the_arrows_and_7_edits() {
     press(&mut h, &[KeypadKey::Down], Modifiers::MAC_CMD | Modifiers::COMMAND);
     assert_eq!(active(&h).as_deref(), Some("C1048576"));
 }
+
+#[test]
+fn cmd_plus_and_minus_insert_and_delete_whole_rows_and_columns() {
+    let mut s = blank();
+    s.execute("range.setValues", json!({"range": "A1:A3", "values": [[1], [2], [3]]})).unwrap();
+    s.execute("range.setValues", json!({"range": "B1:C1", "values": [["b", "c"]]})).unwrap();
+    s.execute("selection.set", json!({"range": "2:2"})).unwrap();
+    let mut h = harness(s);
+    // Cmd++ (Shift+=) inserts a row above the selected one.
+    h.input_mut().events.push(Event::ModifiersChanged(Modifiers::COMMAND | Modifiers::SHIFT));
+    key(&mut h, Key::Plus, Modifiers::COMMAND | Modifiers::SHIFT);
+    assert_eq!(value(&h, "A2"), Value::Empty);
+    assert_eq!(value(&h, "A3"), Value::Number(2.0));
+    // Cmd+- deletes it again, without a dialog.
+    h.input_mut().events.push(Event::ModifiersChanged(Modifiers::COMMAND));
+    key(&mut h, Key::Minus, Modifiers::COMMAND);
+    assert_eq!(value(&h, "A2"), Value::Number(2.0));
+    assert!(h.state().dialog.is_none());
+    // Whole columns: Cmd+= inserts a column, Cmd+- deletes it.
+    h.state_mut().session.run("selection.set", json!({"range": "B:B"})).unwrap();
+    key(&mut h, Key::Equals, Modifiers::COMMAND);
+    assert_eq!(value(&h, "B1"), Value::Empty);
+    assert_eq!(value(&h, "C1"), Value::text("b"));
+    key(&mut h, Key::Minus, Modifiers::COMMAND);
+    assert_eq!(value(&h, "B1"), Value::text("b"));
+    // A plain range still asks how to shift.
+    h.state_mut().session.run("selection.set", json!({"range": "A1:A2"})).unwrap();
+    key(&mut h, Key::Minus, Modifiers::COMMAND);
+    assert_eq!(h.state().dialog.as_ref().map(|d| d.name().to_string()).as_deref(), Some("deleteCells"));
+}
