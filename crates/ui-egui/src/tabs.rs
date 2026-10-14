@@ -240,7 +240,7 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                 if app.keypad_arrows {
                     ui.add_space(12.0);
                     ui.label(egui::RichText::new("Keypad Arrows").font(theme::ui_font(12.5)).color(t.text_dim))
-                        .on_hover_text("Num Lock: keypad 4 8 6 2 move like arrow keys, 7 edits the cell (then the keypad types)");
+                        .on_hover_text("Num Lock: keypad 4 8 6 2 move like arrow keys, 7 edits the cell (Num Lock is off until Enter, except after = + - to point at cells; press Num Lock to move away)");
                 }
                 if let Some(d) = app.session.active() {
                     if d.wb.vba_project.is_some() {

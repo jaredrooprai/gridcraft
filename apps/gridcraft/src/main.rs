@@ -57,7 +57,9 @@ impl eframe::App for App {
         self.0.raw_input_hook(raw);
         #[cfg(target_os = "macos")]
         if let Ok(mut k) = self.3.lock() {
-            self.0.keypad_arrows = k.on;
+            // Shown off while a cell is edited (after 7), except while pointing, and back on
+            // when the edit ends.
+            self.0.keypad_arrows = k.navigating();
             let keys = std::mem::take(&mut k.keys);
             self.0.keypad_input(&keys, ctx.input(|i| i.modifiers), raw);
         }
@@ -71,10 +73,11 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.0.ui(ui);
         // While a cell is edited or a dialog is open the keypad types digits, not Num Lock
-        // navigation (keypad.rs).
+        // navigation (keypad.rs), except while a formula waits for a reference (after = + -),
+        // when the keypad arrows point at cells. Num Lock mid-edit brings the arrows back.
         #[cfg(target_os = "macos")]
         if let Ok(mut k) = self.3.lock() {
-            k.typing = self.0.editor.is_some() || self.0.dialog.is_some();
+            k.set_typing((self.0.editor.is_some() && !self.0.keypad_points()) || self.0.dialog.is_some());
         }
     }
     fn on_exit(&mut self) {

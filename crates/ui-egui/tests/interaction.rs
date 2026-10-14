@@ -1031,3 +1031,91 @@ fn a_fully_typed_function_name_stays_listed_and_tab_completes_it() {
     key(&mut h, Key::Enter, Modifiers::NONE);
     assert!(matches!(value(&h, "A1"), Value::Number(n) if (n - 100.0 / 1.1).abs() < 1e-9));
 }
+
+#[test]
+fn command_keypad_plus_and_minus_insert_and_delete_whole_rows() {
+    use gridcraft_ui_egui::KeypadKey;
+    let mut s = blank();
+    s.execute("range.setValues", json!({"range": "A1:A3", "values": [[1], [2], [3]]})).unwrap();
+    s.execute("selection.set", json!({"range": "2:2"})).unwrap();
+    let mut h = harness(s);
+    let cmd = Modifiers::MAC_CMD | Modifiers::COMMAND;
+    // The keypad sent a fake Command release, so egui thinks no modifier is down.
+    let press = |h: &mut egui_kittest::Harness<'static, SheetApp>, k: KeypadKey| {
+        let mut raw = egui::RawInput::default();
+        h.state_mut().keypad_input(&[(k, cmd)], Modifiers::NONE, &mut raw);
+        h.input_mut().events.extend(raw.events);
+        h.run_steps(2);
+    };
+    press(&mut h, KeypadKey::Plus);
+    assert_eq!(value(&h, "A2"), Value::Empty);
+    assert_eq!(value(&h, "A3"), Value::Number(2.0));
+    press(&mut h, KeypadKey::Minus);
+    assert_eq!(value(&h, "A2"), Value::Number(2.0));
+    assert!(h.state().dialog.is_none());
+    // A plain range: keypad + (no Shift) asks how to shift.
+    h.state_mut().session.run("selection.set", json!({"range": "A1:A2"})).unwrap();
+    press(&mut h, KeypadKey::Plus);
+    assert_eq!(h.state().dialog.as_ref().map(|d| d.name().to_string()).as_deref(), Some("insertCells"));
+}
+
+#[test]
+fn keypad_arrows_point_at_cells_after_an_operator_in_a_cell_opened_with_7() {
+    use gridcraft_ui_egui::KeypadKey;
+    let mut s = blank();
+    s.execute("range.setValues", json!({"range": "A1:A2", "values": [[1], [2]]})).unwrap();
+    s.execute("selection.set", json!({"cell": "B1"})).unwrap();
+    let mut h = harness(s);
+    let press = |h: &mut egui_kittest::Harness<'static, SheetApp>, k: KeypadKey| {
+        let mut raw = egui::RawInput::default();
+        h.state_mut().keypad_input(&[(k, Modifiers::NONE)], Modifiers::NONE, &mut raw);
+        h.input_mut().events.extend(raw.events);
+        h.run_steps(2);
+    };
+    let text = |h: &egui_kittest::Harness<'static, SheetApp>| h.state().editor.as_ref().map(|e| e.text.clone());
+    // 7 edits; plain text doesn't point, so the keypad types.
+    press(&mut h, KeypadKey::Edit);
+    assert!(!h.state().keypad_points());
+    h.input_mut().events.push(Event::Text("=".into()));
+    h.run_steps(2);
+    assert!(h.state().keypad_points());
+    // The keypad arrows point (B1 -> A1), even though 7 opened the cell in Edit mode.
+    press(&mut h, KeypadKey::Left);
+    assert_eq!(text(&h).as_deref(), Some("=A1"));
+    assert!(h.state().keypad_points());
+    h.input_mut().events.push(Event::Text("+".into()));
+    h.run_steps(2);
+    press(&mut h, KeypadKey::Left);
+    press(&mut h, KeypadKey::Down);
+    assert_eq!(text(&h).as_deref(), Some("=A1+A2"));
+    // 7 while pointing types a 7.
+    h.input_mut().events.push(Event::Text("+".into()));
+    h.run_steps(2);
+    press(&mut h, KeypadKey::Edit);
+    assert_eq!(text(&h).as_deref(), Some("=A1+A2+7"));
+    assert!(!h.state().keypad_points());
+    key(&mut h, Key::Enter, Modifiers::NONE);
+    assert_eq!(value(&h, "B1"), Value::Number(10.0));
+}
+
+#[test]
+fn keypad_arrow_leaves_a_cell_opened_with_7() {
+    use gridcraft_ui_egui::KeypadKey;
+    let mut s = blank();
+    s.execute("selection.set", json!({"cell": "B2"})).unwrap();
+    let mut h = harness(s);
+    let press = |h: &mut egui_kittest::Harness<'static, SheetApp>, k: KeypadKey| {
+        let mut raw = egui::RawInput::default();
+        h.state_mut().keypad_input(&[(k, Modifiers::NONE)], Modifiers::NONE, &mut raw);
+        h.input_mut().events.extend(raw.events);
+        h.run_steps(2);
+    };
+    press(&mut h, KeypadKey::Edit);
+    h.input_mut().events.push(Event::Text("5".into()));
+    h.run_steps(2);
+    // Num Lock pressed mid-edit sends the keypad arrows here: they commit and move.
+    press(&mut h, KeypadKey::Down);
+    assert!(h.state().editor.is_none());
+    assert_eq!(value(&h, "B2"), Value::Number(5.0));
+    assert_eq!(h.state().session.active().map(|d| d.selection.active.a1()).as_deref(), Some("B3"));
+}

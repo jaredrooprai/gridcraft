@@ -6,8 +6,13 @@
 //! Lock toggles a mode in which keypad 4, 8, 6 and 2 move like the arrow keys and 7 edits the
 //! active cell; the keys are swallowed and handed to the app as [`KeypadKey`]s, which
 //! [`gridcraft_ui_egui::SheetApp::keypad_input`] turns into input on the next frame. Every other
-//! key types as usual, and while a cell is being edited (after 7) or a dialog is open the keypad
-//! types its digits.
+//! key types as usual. While a cell is being edited (after 7) or a dialog is open, the mode is
+//! off: the keypad types its digits, and the mode comes back on when the edit ends (Enter). A
+//! formula waiting for a reference (after `=`, `+` or `-`) keeps it on, so the arrows point, and
+//! Num Lock pressed mid-edit turns it back on, so a keypad arrow leaves the cell.
+//!
+//! Keypad + and - with Command held (insert and delete rows/columns) are taken here too, in
+//! either mode: keypads send a fake Command release before them, so egui would see a bare + or -.
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -31,6 +36,39 @@ pub struct Shared {
     /// moving. The app sets it after each frame; 7 sets it at once, so a digit typed right after
     /// 7 goes into the cell.
     pub typing: bool,
+    /// Num Lock was pressed while typing: the keypad navigates anyway until typing ends (the app
+    /// clears it then).
+    pub arrows: bool,
+}
+
+impl Shared {
+    /// Whether the keypad navigates now: Num Lock mode is on and nothing is being typed (or Num
+    /// Lock was pressed to navigate away). The app shows the mode (status bar, selection colour)
+    /// only then.
+    pub fn navigating(&self) -> bool {
+        self.on && (!self.typing || self.arrows)
+    }
+
+    /// Num Lock: toggles the mode, or while typing switches the keypad between typing and arrows
+    /// (turning the mode on if it was off).
+    fn num_lock(&mut self) {
+        if !self.typing {
+            self.on = !self.on;
+        } else if !self.on {
+            self.on = true;
+            self.arrows = true;
+        } else {
+            self.arrows = !self.arrows;
+        }
+    }
+
+    /// The app's state after a frame: whether a cell is edited or a dialog is open.
+    pub fn set_typing(&mut self, typing: bool) {
+        self.typing = typing;
+        if !typing {
+            self.arrows = false;
+        }
+    }
 }
 
 pub type Handle = Arc<Mutex<Shared>>;
@@ -59,8 +97,8 @@ impl<A> Keypad<A> {
         self.route(code, key.state == ElementState::Pressed, key.repeat)
     }
 
-    /// Whether a key press or release is taken: Num Lock, and the navigation keys in Num Lock
-    /// mode (unless typing).
+    /// Whether a key press or release is taken: Num Lock, the navigation keys in Num Lock mode,
+    /// and Command + keypad +/- (unless typing).
     fn route(&mut self, code: KeyCode, pressed: bool, repeat: bool) -> bool {
         if is_modifier(code) {
             if pressed {
@@ -75,9 +113,9 @@ impl<A> Keypad<A> {
         let Ok(mut s) = self.shared.lock() else { return false };
         if code == KeyCode::NumLock {
             if !repeat {
-                s.on = !s.on;
+                s.num_lock();
             }
-        } else if let Some(k) = navigation(code).filter(|_| s.on && !s.typing) {
+        } else if let Some(k) = navigation(code).filter(|_| s.navigating()) {
             // Held arrows repeat; held 7 edits once.
             if !(repeat && k == KeypadKey::Edit) {
                 s.keys.push((k, self.held_modifiers()));
@@ -85,6 +123,8 @@ impl<A> Keypad<A> {
             if k == KeypadKey::Edit {
                 s.typing = true;
             }
+        } else if let Some(k) = sign(code).filter(|_| !s.typing && self.held_modifiers().command) {
+            s.keys.push((k, self.held_modifiers()));
         } else {
             return false;
         }
@@ -136,6 +176,15 @@ fn navigation(code: KeyCode) -> Option<KeypadKey> {
         KeyCode::Numpad8 => KeypadKey::Up,
         KeyCode::Numpad2 => KeypadKey::Down,
         KeyCode::Numpad7 => KeypadKey::Edit,
+        _ => return None,
+    })
+}
+
+/// Keypad + and -, taken with Command held.
+fn sign(code: KeyCode) -> Option<KeypadKey> {
+    Some(match code {
+        KeyCode::NumpadAdd => KeypadKey::Plus,
+        KeyCode::NumpadSubtract => KeypadKey::Minus,
         _ => return None,
     })
 }
@@ -203,8 +252,11 @@ mod tests {
         assert!(!k.route(KeyCode::SuperLeft, true, false));
         assert!(taken(&mut k, KeyCode::Numpad2));
         assert!(!k.route(KeyCode::SuperLeft, false, false));
-        // 7 edits; then the keypad types digits into the cell until the app says the edit is over.
+        // 7 edits and turns the mode off; the keypad types digits into the cell until the app
+        // says the edit is over, then the mode is back on.
+        assert!(shared.lock().is_ok_and(|s| s.navigating()));
         assert!(taken(&mut k, KeyCode::Numpad7));
+        assert!(shared.lock().is_ok_and(|s| s.on && !s.navigating()));
         assert!(!taken(&mut k, KeyCode::Numpad2));
         assert!(!taken(&mut k, KeyCode::Numpad4));
         assert!(!taken(&mut k, KeyCode::Numpad7));
@@ -217,6 +269,7 @@ mod tests {
             keys.ok(),
             Some(vec![(KeypadKey::Right, egui::Modifiers::SHIFT), (KeypadKey::Down, cmd), (KeypadKey::Edit, egui::Modifiers::NONE)])
         );
+        assert!(shared.lock().is_ok_and(|s| s.navigating()));
         assert!(taken(&mut k, KeyCode::Numpad2));
         // A dialog is open: the keypad types digits into it too.
         if let Ok(mut s) = shared.lock() {
@@ -229,6 +282,66 @@ mod tests {
         // Off again.
         assert!(taken(&mut k, KeyCode::NumLock));
         assert!(!taken(&mut k, KeyCode::Numpad2));
+    }
+
+    #[test]
+    fn num_lock_while_typing_switches_to_arrows_until_the_edit_ends() {
+        let shared = Handle::default();
+        let mut k = Keypad::new((), shared.clone());
+        let taken = |k: &mut Keypad<()>, code| k.route(code, true, false) & k.route(code, false, false);
+        let navigating = || shared.lock().is_ok_and(|s| s.navigating());
+        // On, then 7 edits: the keypad types.
+        assert!(taken(&mut k, KeyCode::NumLock));
+        assert!(taken(&mut k, KeyCode::Numpad7));
+        assert!(!taken(&mut k, KeyCode::Numpad4));
+        // Num Lock mid-edit: the arrows are back, and the mode stays on.
+        assert!(taken(&mut k, KeyCode::NumLock));
+        assert!(navigating());
+        assert!(taken(&mut k, KeyCode::Numpad4));
+        // Again: typing.
+        assert!(taken(&mut k, KeyCode::NumLock));
+        assert!(!navigating());
+        assert!(taken(&mut k, KeyCode::NumLock));
+        // The edit ends (an arrow left the cell): plain Num Lock mode again.
+        if let Ok(mut s) = shared.lock() {
+            s.set_typing(false);
+            s.keys.clear();
+        }
+        assert!(navigating());
+        // Mode off and typing in a cell: Num Lock turns the arrows on for this edit.
+        assert!(taken(&mut k, KeyCode::NumLock));
+        if let Ok(mut s) = shared.lock() {
+            s.set_typing(true);
+        }
+        assert!(taken(&mut k, KeyCode::NumLock));
+        assert!(navigating());
+        if let Ok(mut s) = shared.lock() {
+            s.set_typing(false);
+        }
+        assert!(navigating());
+    }
+
+    #[test]
+    fn command_keypad_plus_and_minus_are_taken_in_either_mode() {
+        let shared = Handle::default();
+        let mut k = Keypad::new((), shared.clone());
+        let taken = |k: &mut Keypad<()>, code| k.route(code, true, false) & k.route(code, false, false);
+        // Without Command they type.
+        assert!(!taken(&mut k, KeyCode::NumpadAdd));
+        assert!(!taken(&mut k, KeyCode::NumpadSubtract));
+        // Command held (its fake release before the key doesn't matter), Num Lock off or on.
+        assert!(!k.route(KeyCode::SuperLeft, true, false));
+        assert!(taken(&mut k, KeyCode::NumpadSubtract));
+        assert!(taken(&mut k, KeyCode::NumLock));
+        assert!(taken(&mut k, KeyCode::NumpadAdd));
+        // Editing a cell: left to the editor.
+        if let Ok(mut s) = shared.lock() {
+            s.typing = true;
+        }
+        assert!(!taken(&mut k, KeyCode::NumpadAdd));
+        let keys = shared.lock().map(|mut s| std::mem::take(&mut s.keys));
+        let cmd = egui::Modifiers::MAC_CMD | egui::Modifiers::COMMAND;
+        assert_eq!(keys.ok(), Some(vec![(KeypadKey::Minus, cmd), (KeypadKey::Plus, cmd)]));
     }
 
     #[test]

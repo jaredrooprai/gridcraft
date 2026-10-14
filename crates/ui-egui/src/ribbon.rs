@@ -2415,6 +2415,18 @@ fn whole_lines(app: &SheetApp) -> Option<bool> {
     }
 }
 
+/// Cmd++: inserts whole rows or columns before the selected ones, or asks how to shift cells.
+fn insert_lines(app: &mut SheetApp) -> Option<(&'static str, serde_json::Value)> {
+    match whole_lines(app) {
+        Some(true) => Some(("home.insertRows", json!({}))),
+        Some(false) => Some(("home.insertColumns", json!({}))),
+        None => {
+            app.open_dialog("insertCells", json!({}));
+            None
+        }
+    }
+}
+
 /// Command-key shortcuts when the grid has focus.
 pub fn shortcut(app: &mut SheetApp, key: Key, m: Modifiers) {
     let shift = m.shift;
@@ -2475,14 +2487,9 @@ pub fn shortcut(app: &mut SheetApp, key: Key, m: Modifiers) {
                 None
             }
         },
-        Key::Plus | Key::Equals if shift || whole_lines(app).is_some() => match whole_lines(app) {
-            Some(true) => Some(("home.insertRows", json!({}))),
-            Some(false) => Some(("home.insertColumns", json!({}))),
-            None => {
-                app.open_dialog("insertCells", json!({}));
-                None
-            }
-        },
+        // Plus without Shift is keypad + (or a layout with an unshifted +).
+        Key::Plus => insert_lines(app),
+        Key::Equals if shift || whole_lines(app).is_some() => insert_lines(app),
         Key::Semicolon => {
             // Insert today's date.
             let text = app

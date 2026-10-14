@@ -209,7 +209,8 @@ pub struct Perf {
     last: f64,
 }
 
-/// A numeric keypad key while Num Lock makes the keypad navigate (see [`SheetApp::keypad_input`]).
+/// A numeric keypad key while Num Lock makes the keypad navigate, or keypad + and - with Command
+/// held (see [`SheetApp::keypad_input`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeypadKey {
     Left,
@@ -218,6 +219,10 @@ pub enum KeypadKey {
     Down,
     /// 7: edit the active cell.
     Edit,
+    /// Command + keypad +: insert rows, columns or cells.
+    Plus,
+    /// Command + keypad -: delete rows, columns or cells.
+    Minus,
 }
 
 pub struct SheetApp {
@@ -1100,8 +1105,10 @@ impl SheetApp {
 
     /// Keypad keys in Num Lock arrow mode, which the desktop app reads from the window system
     /// (egui can't tell keypad digits from the number row). 4, 8, 6 and 2 press the arrow keys,
-    /// with the modifiers held so Shift extends the selection; 7 edits the active cell (F2)
-    /// unless a cell is being edited already.
+    /// with the modifiers held so Shift extends the selection; 7 edits the active cell (F2), or
+    /// types 7 into a formula being pointed at (see [`SheetApp::keypad_points`]). In a cell being
+    /// edited the arrows act as in Enter mode, even though 7 opened the cell in Edit mode: they
+    /// insert cell references while pointing, otherwise commit the edit and move.
     /// `held` is the modifier state before this frame's events (`ctx.input(|i| i.modifiers)`);
     /// each key comes with the modifier keys physically down, which the modifier state can get
     /// wrong (keypads send fake Shift or Command releases before keypad keys).
@@ -1117,6 +1124,15 @@ impl SheetApp {
             .unwrap_or(held);
         for (k, down) in keys {
             let modifiers = modifiers | *down;
+            if *k == KeypadKey::Edit && self.keypad_points() {
+                raw.events.push(egui::Event::Text("7".into()));
+                continue;
+            }
+            if matches!(k, KeypadKey::Left | KeypadKey::Right | KeypadKey::Up | KeypadKey::Down)
+                && let Some(ed) = self.editor.as_mut().filter(|ed| !ed.from_formula_bar)
+            {
+                ed.enter_mode = true;
+            }
             let key = match k {
                 KeypadKey::Left => egui::Key::ArrowLeft,
                 KeypadKey::Right => egui::Key::ArrowRight,
@@ -1124,11 +1140,19 @@ impl SheetApp {
                 KeypadKey::Down => egui::Key::ArrowDown,
                 KeypadKey::Edit if self.editor.is_some() => continue,
                 KeypadKey::Edit => egui::Key::F2,
+                KeypadKey::Plus => egui::Key::Plus,
+                KeypadKey::Minus => egui::Key::Minus,
             };
             for pressed in [true, false] {
                 raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers });
             }
         }
+    }
+
+    /// A formula in the cell is waiting for a reference (after `=`, `+`, `-` and the like), so Num
+    /// Lock's keypad arrows stay on to point at cells instead of the keypad typing digits.
+    pub fn keypad_points(&self) -> bool {
+        self.editor.as_ref().is_some_and(|ed| !ed.from_formula_bar && ed.can_point())
     }
 
     pub fn raw_input_hook(&mut self, raw: &mut egui::RawInput) {
