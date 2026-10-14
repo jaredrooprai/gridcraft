@@ -1747,6 +1747,7 @@ mod tests {
 
     fn s() -> Session {
         let mut s = Session::new();
+        s.prefs.default_number_format = "General".into();
         s.new_workbook();
         s
     }

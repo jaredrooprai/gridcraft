@@ -644,6 +644,7 @@ mod tests {
     #[test]
     fn falling_growth_series_stops_at_its_stop_value() {
         let mut s = crate::Session::new();
+        s.prefs.default_number_format = "General".into();
         s.new_workbook();
         s.execute("cell.set", serde_json::json!({"cell": "A1", "input": "5"})).unwrap();
         s.execute("edit.fillSeries", serde_json::json!({"range": "A1:A6", "type": "growth", "step": 0.5, "stop": 1})).unwrap();

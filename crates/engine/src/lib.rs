@@ -199,6 +199,8 @@ pub struct Prefs {
     pub user_dictionary: Vec<String>,
     /// View › Show › Formula Bar (an application option in Excel, not saved in the file).
     pub formula_bar: bool,
+    /// Number format of the Normal style in new workbooks ("General" for Excel's default).
+    pub default_number_format: String,
 }
 
 impl Default for Prefs {
@@ -213,6 +215,7 @@ impl Default for Prefs {
             r1c1: false,
             user_dictionary: vec![],
             formula_bar: true,
+            default_number_format: "#,##0".into(),
         }
     }
 }
@@ -302,6 +305,11 @@ impl Session {
     pub fn new_workbook(&mut self) -> usize {
         let n = (1..).find(|n| !self.docs.iter().any(|d| d.title == format!("Book{n}") && d.path.is_none())).unwrap_or(1);
         let mut wb = Workbook::new();
+        let code = self.prefs.default_number_format.trim();
+        if !code.is_empty() && !code.eq_ignore_ascii_case("General") {
+            let normal = gridcraft_model::Style { num_fmt: gridcraft_model::NumFmt::new(code), ..Default::default() };
+            wb.styles = gridcraft_model::StyleTable::with_default(normal);
+        }
         for _ in 1..self.prefs.sheets_in_new_workbook.clamp(1, 255) {
             let name = wb.next_sheet_name();
             wb.sheets.push(Arc::new(gridcraft_model::Sheet::new(name)));

@@ -134,14 +134,10 @@ pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gri
     // A leading `+` or `-` starts a formula too, as in Excel (`+20+20` is `=+20+20`), unless the
     // whole entry is a number (`-5`, `+1,000`). Arithmetic on numbers (`-5-3`) only becomes a
     // formula when it parses, so text like `+1 555 1234` stays text.
-    let signed = input.len() > 1
-        && (input.starts_with('+') || input.starts_with('-'))
-        && gridcraft_core::parse::parse_number_text(input).is_none();
+    let signed = input.len() > 1 && (input.starts_with('+') || input.starts_with('-')) && gridcraft_core::parse::parse_number_text(input).is_none();
     let is_formula = input.starts_with('=')
         || (signed && input.chars().nth(1).is_some_and(|c| c.is_ascii_alphabetic() || c == '('))
-        || (signed
-            && input.chars().nth(1).is_some_and(|c| c.is_ascii_digit() || c == '.')
-            && gridcraft_formula::parse(input).is_ok());
+        || (signed && input.chars().nth(1).is_some_and(|c| c.is_ascii_digit() || c == '.') && gridcraft_formula::parse(input).is_ok());
     if is_formula {
         let body = input.strip_prefix('=').unwrap_or(input);
         // Excel closes missing parentheses for you.
@@ -160,7 +156,7 @@ pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gri
         let mut cell = Cell::formula(Formula::from_expr(expr));
         cell.style = style;
         // Formulas whose result is a date/time get a format from functions like TODAY().
-        if wb.styles.get(style).num_fmt.as_str() == "General" {
+        if unformatted(wb, style) {
             let f = cell.formula.as_ref().map(|f| f.text.to_ascii_uppercase()).unwrap_or_default();
             let auto = if f.starts_with("TODAY(")
                 || f.starts_with("DATE(")
@@ -184,17 +180,23 @@ pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gri
     }
     let parsed = gridcraft_core::parse::parse_input(input, wb.date_system);
     let mut style = style;
-    if let Some(code) = parsed.format {
-        let cur = wb.styles.get(style).num_fmt.as_str().to_string();
-        if cur == "General" {
-            style = wb.styles.derive(style, |s| s.num_fmt = gridcraft_model::NumFmt::new(code));
-        }
+    if let Some(code) = parsed.format
+        && unformatted(wb, style)
+    {
+        style = wb.styles.derive(style, |s| s.num_fmt = gridcraft_model::NumFmt::new(code));
     }
     // Wrap text automatically when the input has line breaks (Alt+Enter).
     if input.contains('\n') && !wb.styles.get(style).align.wrap {
         style = wb.styles.derive(style, |s| s.align.wrap = true);
     }
     Ok(Some(Cell { value: parsed.value, formula: None, style }))
+}
+
+/// Whether `style` has no number format of its own, so entry may apply one automatically (a
+/// date, percent or currency format): General, or the workbook's Normal format.
+fn unformatted(wb: &gridcraft_model::Workbook, style: gridcraft_model::StyleId) -> bool {
+    let code = wb.styles.get(style).num_fmt.as_str();
+    code == "General" || code == wb.styles.get(gridcraft_model::StyleId::DEFAULT).num_fmt.as_str()
 }
 
 /// Like Excel, a formula that calls a built-in function with too few or too many arguments is
@@ -844,7 +846,7 @@ fn numeric_from_html(cell: &mut Cell, field: &str, html: Option<&crate::clip_htm
         return;
     }
     cell.value = Value::number(n);
-    if wb.styles.get(cell.style).num_fmt.as_str() == "General"
+    if unformatted(wb, cell.style)
         && let Some(code) = crate::clip_html::format_for(field, n)
     {
         cell.style = wb.styles.derive(cell.style, |s| s.num_fmt = gridcraft_model::NumFmt::new(&code));
@@ -1608,6 +1610,29 @@ mod tests {
         assert_eq!(get(&mut s, "A3")["value"], json!(true));
         assert_eq!(get(&mut s, "A4")["value"], json!(200.5));
         assert!(s.execute("cell.set", json!({"cell": "A5"})).is_err());
+    }
+
+    #[test]
+    fn new_workbooks_show_whole_numbers_with_thousands_separators() {
+        let mut s = Session::new();
+        s.new_workbook();
+        for (cell, input) in [("A1", "1234567.89"), ("A2", "=1000*3"), ("A3", "3/4/2026"), ("A4", "50%"), ("A5", "$12.50")] {
+            s.execute("cell.set", json!({"cell": cell, "input": input})).unwrap();
+        }
+        let text = |s: &mut Session, a: &str| s.execute("cell.get", json!({"cell": a})).unwrap()["text"].clone();
+        assert_eq!(text(&mut s, "A1"), "1,234,568");
+        assert_eq!(text(&mut s, "A2"), "3,000");
+        // Entry still picks a date, percent or currency format automatically.
+        assert_eq!(text(&mut s, "A3"), "3/4/2026");
+        assert_eq!(text(&mut s, "A4"), "50%");
+        assert_eq!(text(&mut s, "A5"), "$12.50");
+        // The value keeps its decimals; only the display rounds.
+        assert_eq!(s.execute("cell.get", json!({"cell": "A1"})).unwrap()["value"], json!(1234567.89));
+        // "General" restores Excel's default.
+        s.prefs.default_number_format = "General".into();
+        s.new_workbook();
+        s.execute("cell.set", json!({"cell": "A1", "input": "1234567.89"})).unwrap();
+        assert_eq!(text(&mut s, "A1"), "1234567.89");
     }
 
     #[test]
