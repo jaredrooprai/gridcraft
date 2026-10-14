@@ -927,3 +927,19 @@ fn clicking_the_zoom_percentage_puts_the_cursor_in_the_custom_box() {
     assert_eq!(zoom, Some(150));
 }
 
+#[test]
+fn control_r_fills_the_first_cells_formula_across_the_selection() {
+    let mut s = blank();
+    s.execute("range.setValues", json!({"range": "A1:D1", "values": [[1, 2, 3, 4]]})).unwrap();
+    s.execute("cell.set", json!({"cell": "A2", "input": "=A1*10"})).unwrap();
+    s.execute("selection.set", json!({"range": "A2:D2"})).unwrap();
+    let mut h = harness(s);
+    // Control (not Command) on a Mac, as in Excel for Mac.
+    h.ctx.set_os(egui::os::OperatingSystem::Mac);
+    h.input_mut().events.push(Event::ModifiersChanged(Modifiers::CTRL));
+    key(&mut h, Key::R, Modifiers::CTRL);
+    for (cell, want) in [("B2", 20.0), ("C2", 30.0), ("D2", 40.0)] {
+        assert_eq!(value(&h, cell), Value::Number(want), "{cell}");
+    }
+}
+

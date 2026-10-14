@@ -96,6 +96,8 @@ fn windows_and_mac_variants() {
     assert_eq!(lookup(Key::L, Some(Key::L), mac_cmd, true), run("home.alignLeft"));
     assert_eq!(lookup(Key::E, Some(Key::E), mac_cmd, true), run("home.alignCenter"));
     assert_eq!(lookup(Key::E, Some(Key::E), ctrl, true), run("edit.flashFill"));
+    assert_eq!(lookup(Key::R, Some(Key::R), ctrl, true), run("edit.fillRight"));
+    assert_eq!(lookup(Key::D, Some(Key::D), ctrl, true), run("edit.fillDown"));
     assert_eq!(lookup(Key::Equals, Some(Key::Equals), Modifiers::ALT, false), run("formulas.autoSum"));
     // The shifted character doesn't matter: Ctrl+Shift+1 is the Number format wherever `!` is.
     assert_eq!(

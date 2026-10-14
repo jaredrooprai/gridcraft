@@ -100,6 +100,9 @@ pub fn lookup(key: Key, physical: Option<Key>, m: Modifiers, mac: bool) -> Optio
         L if cmd => run("insert.table"),
         E if cmd && mac && !s => run("home.alignCenter"),
         E if ctrl && mac && !s => run("edit.flashFill"),
+        // Excel for Mac fills with Control as well as Command (Cmd+D/R are in `ribbon::shortcut`).
+        D if ctrl && mac && !s && !m.command => run("edit.fillDown"),
+        R if ctrl && mac && !s && !m.command => run("edit.fillRight"),
         F if cmd && s && !mac => Shortcut::Dialog("formatCells", json!({"tab": "Font"})),
         G if cmd && s && !mac => Shortcut::Dialog("statistics", json!({})),
         H if cmd && s && mac => Shortcut::Dialog("find", json!({"replace": true})),
