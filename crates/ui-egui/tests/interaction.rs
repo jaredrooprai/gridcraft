@@ -1016,3 +1016,18 @@ fn cmd_plus_and_minus_insert_and_delete_whole_rows_and_columns() {
     key(&mut h, Key::Minus, Modifiers::COMMAND);
     assert_eq!(h.state().dialog.as_ref().map(|d| d.name().to_string()).as_deref(), Some("deleteCells"));
 }
+
+#[test]
+fn a_fully_typed_function_name_stays_listed_and_tab_completes_it() {
+    let mut h = harness(blank());
+    for c in ["=", "n", "p", "v"] {
+        text(&mut h, c);
+    }
+    let list = h.state().editor.as_ref().map(|e| e.autocomplete.clone()).unwrap_or_default();
+    assert_eq!(list.first().map(String::as_str), Some("NPV"), "{list:?}");
+    key(&mut h, Key::Tab, Modifiers::NONE);
+    assert_eq!(h.state().editor.as_ref().map(|e| e.text.as_str()), Some("=NPV("));
+    text(&mut h, "0.1,100)");
+    key(&mut h, Key::Enter, Modifiers::NONE);
+    assert!(matches!(value(&h, "A1"), Value::Number(n) if (n - 100.0 / 1.1).abs() < 1e-9));
+}

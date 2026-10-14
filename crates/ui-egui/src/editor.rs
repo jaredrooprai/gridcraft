@@ -133,10 +133,8 @@ impl EditState {
         }
         let u = word.to_ascii_uppercase();
         // Not after a column letter of a reference like A1 (digits follow) – fine either way.
+        // A fully typed name (`=npv`) stays listed, as in Excel, so Tab still completes it.
         self.autocomplete = names.iter().filter(|n| n.starts_with(&u)).take(12).cloned().collect();
-        if self.autocomplete.len() == 1 && self.autocomplete[0] == u {
-            self.autocomplete.clear();
-        }
         self.ac_index = self.ac_index.min(self.autocomplete.len().saturating_sub(1));
     }
 
@@ -355,6 +353,13 @@ mod tests {
         assert_eq!(e.autocomplete.len(), 3);
         assert!(e.accept_autocomplete());
         assert_eq!(e.text, "=SUM(");
+        // A fully typed name stays in the list, and Tab (accept) adds the parenthesis.
+        let names: Vec<String> = ["NPV", "NOW"].iter().map(|s| s.to_string()).collect();
+        let mut e = EditState::new(0, CellRef::new(0, 0), "=npv".into(), true, false);
+        e.update_autocomplete(&names);
+        assert_eq!(e.autocomplete, ["NPV"]);
+        assert!(e.accept_autocomplete());
+        assert_eq!(e.text, "=NPV(");
         let e = EditState::new(0, CellRef::new(0, 0), "=IF(A1>0,SUM(B1,".into(), true, false);
         assert_eq!(e.current_function(), Some(("SUM".into(), 1)));
     }
