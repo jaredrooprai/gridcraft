@@ -207,6 +207,17 @@ it to `=NPV(` instead of moving to the next cell.
 
 Commit: `bfd327d`.
 
+## 11. Delete only empties the cell
+
+This deliberately differs from Excel for Mac, where Delete (Backspace) clears the cell and starts
+editing it. Here Delete clears the selection's contents and the cell is not opened for editing.
+Fn+Delete (forward delete) also only clears.
+
+Where it lived: the `Key::Backspace` arm of the grid's keyboard handler in
+`crates/ui-egui/src/grid.rs`.
+
+Test: `delete_clears_the_cell_without_editing_it`.
+
 ## Keeping this file current
 
 When a new preference lands on this fork, add a section here in the same shape: the behaviour,

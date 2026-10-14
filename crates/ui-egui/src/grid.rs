@@ -2664,13 +2664,9 @@ fn keyboard(app: &mut SheetApp, ctx: &egui::Context, resp: &egui::Response, geo:
                     Key::Delete if delete_selected_object(app, sh) => {}
                     Key::Delete => app.run_or_alert("edit.clearContents", json!({})),
                     Key::Backspace if delete_selected_object(app, sh) => {}
-                    Key::Backspace => {
-                        // Excel for Mac: Delete clears the cell and starts editing it.
-                        app.run_or_alert("edit.clearContents", json!({}));
-                        if app.session.active().is_some_and(|d| d.selection.is_single_cell()) {
-                            app.begin_edit(Some(String::new()), false);
-                        }
-                    }
+                    // Delete (Backspace) only clears, like Fn+Delete; unlike Excel for Mac it doesn't
+                    // start editing the cell (this fork's preference).
+                    Key::Backspace => app.run_or_alert("edit.clearContents", json!({})),
                     Key::Escape => {
                         app.session.clipboard = None;
                         app.session.format_painter = None;

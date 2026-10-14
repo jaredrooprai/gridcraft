@@ -1119,3 +1119,14 @@ fn keypad_arrow_leaves_a_cell_opened_with_7() {
     assert_eq!(value(&h, "B2"), Value::Number(5.0));
     assert_eq!(h.state().session.active().map(|d| d.selection.active.a1()).as_deref(), Some("B3"));
 }
+
+#[test]
+fn delete_clears_the_cell_without_editing_it() {
+    let mut s = blank();
+    s.execute("cell.set", json!({"cell": "B2", "input": "42"})).unwrap();
+    s.execute("selection.set", json!({"cell": "B2"})).unwrap();
+    let mut h = harness(s);
+    key(&mut h, Key::Backspace, Modifiers::NONE);
+    assert_eq!(value(&h, "B2"), Value::Empty);
+    assert!(h.state().editor.is_none());
+}
