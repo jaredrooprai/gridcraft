@@ -24,9 +24,11 @@ pub const MAC_TITLE_BAR: f32 = 28.0;
 const MAC_LIGHT: f32 = 12.0;
 const MAC_LIGHT_PITCH: f32 = 20.0;
 const MAC_LIGHTS_LEFT: f32 = 10.0;
-/// Where title-bar content starts on macOS: the end of the three lights plus the gap the lights
-/// keep from the top of the window.
-pub const MAC_CONTENT_LEFT: f32 = MAC_LIGHTS_LEFT + 2.0 * MAC_LIGHT_PITCH + MAC_LIGHT + (MAC_TITLE_BAR - MAC_LIGHT) / 2.0;
+/// The gap between the last light and the first title-bar control (AutoSave), wide enough that
+/// the label doesn't crowd the lights.
+const MAC_LIGHTS_GAP: f32 = 16.0;
+/// Where title-bar content starts on macOS: the end of the three lights plus that gap.
+pub const MAC_CONTENT_LEFT: f32 = MAC_LIGHTS_LEFT + 2.0 * MAC_LIGHT_PITCH + MAC_LIGHT + MAC_LIGHTS_GAP;
 
 /// Leave room for the macOS traffic lights when the content extends into the title bar.
 pub const TITLE_LEFT_PAD: f32 = if MAC { MAC_CONTENT_LEFT } else { 8.0 };
@@ -2514,10 +2516,12 @@ mod title_bar_tests {
 
     #[test]
     fn mac_title_bar_centres_and_clears_the_traffic_lights() {
-        // The lights are centred in the bar, and content keeps the same gap after them.
+        // The lights are centred in the bar, and content keeps a clear gap after them: twice the
+        // margin the lights keep from the top of the window.
         let margin = (MAC_TITLE_BAR - MAC_LIGHT) / 2.0;
         let lights_end = MAC_LIGHTS_LEFT + 2.0 * MAC_LIGHT_PITCH + MAC_LIGHT;
-        assert_eq!(MAC_CONTENT_LEFT - lights_end, margin);
+        assert_eq!(MAC_CONTENT_LEFT - lights_end, MAC_LIGHTS_GAP);
+        assert!(MAC_LIGHTS_GAP >= 2.0 * margin);
     }
 }
 
