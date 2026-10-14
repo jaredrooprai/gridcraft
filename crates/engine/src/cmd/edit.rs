@@ -131,11 +131,17 @@ pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gri
     if fmt_is_text {
         return Ok(Some(Cell { value: Value::text(input), formula: None, style }));
     }
+    // A leading `+` or `-` starts a formula too, as in Excel (`+20+20` is `=+20+20`), unless the
+    // whole entry is a number (`-5`, `+1,000`). Arithmetic on numbers (`-5-3`) only becomes a
+    // formula when it parses, so text like `+1 555 1234` stays text.
+    let signed = input.len() > 1
+        && (input.starts_with('+') || input.starts_with('-'))
+        && gridcraft_core::parse::parse_number_text(input).is_none();
     let is_formula = input.starts_with('=')
-        || (input.len() > 1
-            && (input.starts_with('+') || input.starts_with('-'))
-            && gridcraft_core::parse::parse_number_text(input).is_none()
-            && input.chars().nth(1).is_some_and(|c| c.is_ascii_alphabetic() || c == '('));
+        || (signed && input.chars().nth(1).is_some_and(|c| c.is_ascii_alphabetic() || c == '('))
+        || (signed
+            && input.chars().nth(1).is_some_and(|c| c.is_ascii_digit() || c == '.')
+            && gridcraft_formula::parse(input).is_ok());
     if is_formula {
         let body = input.strip_prefix('=').unwrap_or(input);
         // Excel closes missing parentheses for you.
@@ -1602,6 +1608,26 @@ mod tests {
         assert_eq!(get(&mut s, "A3")["value"], json!(true));
         assert_eq!(get(&mut s, "A4")["value"], json!(200.5));
         assert!(s.execute("cell.set", json!({"cell": "A5"})).is_err());
+    }
+
+    #[test]
+    fn a_leading_sign_starts_a_formula() {
+        let mut s = Session::new();
+        s.new_workbook();
+        for (cell, input) in [("A1", "+20+20"), ("A2", "-5-3"), ("A3", "+20"), ("A4", "-5"), ("A5", "+1 555 1234")] {
+            s.execute("cell.set", json!({"cell": cell, "input": input})).unwrap();
+        }
+        let get = |s: &mut Session, a: &str| s.execute("cell.get", json!({"cell": a})).unwrap();
+        assert_eq!(get(&mut s, "A1")["value"], json!(40.0));
+        assert_eq!(get(&mut s, "A2")["value"], json!(-8.0));
+        // Plain signed numbers stay constants.
+        assert_eq!(get(&mut s, "A3")["value"], json!(20.0));
+        assert_eq!(get(&mut s, "A4")["value"], json!(-5.0));
+        let bar = |s: &Session, a: &str| s.doc().unwrap().wb.active().unwrap().cell(CellRef::parse(a).unwrap()).map(|c| c.bar_text());
+        assert_eq!(bar(&s, "A1").as_deref(), Some("=+20+20"));
+        assert_eq!(bar(&s, "A3").as_deref(), Some("20"));
+        // Input that doesn't parse as a formula is kept as typed.
+        assert_eq!(get(&mut s, "A5")["value"], json!("+1 555 1234"));
     }
 
     #[test]

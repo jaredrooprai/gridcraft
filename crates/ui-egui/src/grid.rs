@@ -2927,12 +2927,12 @@ fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
 /// Used by `EditState` users to keep the active cell visible while pointing.
 pub fn point_move(app: &mut SheetApp, ed: &mut EditState, dr: i64, dc: i64, extend: bool) {
     let Some(d) = app.session.active() else { return };
-    let from = ed.point_cell.unwrap_or(ed.cell);
+    let from = ed.point_origin();
     let to = from.offset_clamped(dr, dc);
     let text = if extend {
         // The anchor is the corner opposite the moving end: the written range is normalized, so
         // after extending up or left its first cell is the moving end, not the anchor.
-        let pointed = ed.point.and_then(|(s, e)| ed.text.get(s..e)).and_then(RangeRef::parse);
+        let pointed = ed.point.filter(|_| ed.point_continues()).and_then(|(s, e)| ed.text.get(s..e)).and_then(RangeRef::parse);
         let anchor = pointed
             .map(|r| {
                 CellRef::new(

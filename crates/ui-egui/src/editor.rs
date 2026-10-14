@@ -65,10 +65,11 @@ impl EditState {
         }
     }
 
+    /// Like Excel, a leading `+` or `-` starts a formula as `=` does, so `+` then an arrow key
+    /// points at a cell. A plain signed number (`-5`) still commits on an arrow key, since its
+    /// caret doesn't follow an operator.
     pub fn is_formula(&self) -> bool {
-        self.text.starts_with('=')
-            || (self.text.starts_with('+') && self.text.len() > 1)
-            || (self.text.starts_with('-') && self.text.len() > 1 && !self.text[1..].starts_with(|c: char| c.is_ascii_digit()))
+        self.text.starts_with(['=', '+', '-'])
     }
 
     fn byte_caret(&self) -> usize {
@@ -89,6 +90,17 @@ impl EditState {
         let before = self.text.get(..self.byte_caret()).unwrap_or("");
         let last = before.trim_end().chars().last();
         matches!(last, Some('=' | '(' | ',' | '+' | '-' | '*' | '/' | '^' | '&' | '<' | '>' | ':' | ';' | '{'))
+    }
+
+    /// Where an arrow key in point mode moves from: the last pointed cell while that reference is
+    /// still being adjusted, otherwise (a new reference, after typing an operator) the edited cell.
+    pub fn point_origin(&self) -> CellRef {
+        self.point_cell.filter(|_| self.point_continues()).unwrap_or(self.cell)
+    }
+
+    /// The caret is at the end of the last pointed reference, so pointing replaces it.
+    pub fn point_continues(&self) -> bool {
+        self.point.is_some_and(|(_, e)| e == self.byte_caret())
     }
 
     /// Inserts (or replaces the last pointed) reference text at the caret.
@@ -307,6 +319,32 @@ mod tests {
         assert!(e.can_point());
         let e2 = EditState::new(0, CellRef::new(0, 0), "hello".into(), true, false);
         assert!(!e2.can_point());
+    }
+
+    #[test]
+    fn a_new_reference_points_from_the_edited_cell() {
+        let mut e = EditState::new(0, CellRef::parse("C5").unwrap(), "=".into(), true, false);
+        assert_eq!(e.point_origin(), CellRef::parse("C5").unwrap());
+        e.insert_ref("C4");
+        e.point_cell = CellRef::parse("C4");
+        // Still adjusting the same reference: arrows continue from it.
+        assert_eq!(e.point_origin(), CellRef::parse("C4").unwrap());
+        e.text.push('+');
+        e.caret += 1;
+        // After an operator, a new reference starts from the edited cell again.
+        assert_eq!(e.point_origin(), CellRef::parse("C5").unwrap());
+    }
+
+    #[test]
+    fn a_leading_sign_points_like_equals() {
+        for start in ["+", "-", "+20+", "-5-"] {
+            let mut e = EditState::new(0, CellRef::new(0, 0), start.into(), true, false);
+            assert!(e.can_point(), "{start}");
+            e.insert_ref("B2");
+            assert_eq!(e.text, format!("{start}B2"));
+        }
+        // A signed number ends with a digit, so an arrow key commits it.
+        assert!(!EditState::new(0, CellRef::new(0, 0), "-5".into(), true, false).can_point());
     }
 
     #[test]
