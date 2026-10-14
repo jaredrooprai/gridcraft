@@ -912,3 +912,18 @@ fn rotated_wrapped_text_is_drawn_rotated_inside_its_cell() {
         assert!(clip.width() < 70.0, "clip spans one 6-character column, got {clip:?}");
     }
 }
+
+#[test]
+fn clicking_the_zoom_percentage_puts_the_cursor_in_the_custom_box() {
+    let mut h = harness(blank());
+    h.get_by_label("100%").click();
+    h.run_steps(3);
+    assert_eq!(h.state().dialog.as_ref().map(|d| d.name().to_string()).as_deref(), Some("zoom"));
+    // The Custom box has focus with its number selected, so typing replaces it.
+    text(&mut h, "150");
+    key(&mut h, Key::Enter, Modifiers::NONE);
+    h.run_steps(3);
+    let zoom = h.state().session.active().and_then(|d| d.wb.active().map(|s| s.zoom));
+    assert_eq!(zoom, Some(150));
+}
+

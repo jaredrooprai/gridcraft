@@ -40,6 +40,8 @@ pub struct Dialog {
     picture_target: Option<(u64, usize)>,
     /// The dialog this one was opened from (Name Manager › New…): it comes back when this closes.
     back: Option<Box<Dialog>>,
+    /// The field that takes keyboard focus when the dialog opens (Zoom's Custom box).
+    focus: Option<&'static str>,
 }
 
 impl Dialog {
@@ -58,6 +60,12 @@ impl Dialog {
         self.values.insert(key.into(), value);
     }
 
+    /// Puts the keyboard focus in `key`'s field when the dialog opens.
+    fn with_focus(mut self, key: &'static str) -> Dialog {
+        self.focus = Some(key);
+        self
+    }
+
     fn form(name: &str, title: &str, command: &'static str, fields: Vec<Field>, defaults: Json) -> Dialog {
         Dialog {
             name: name.into(),
@@ -73,6 +81,7 @@ impl Dialog {
             picture_inbox: None,
             picture_target: None,
             back: None,
+            focus: None,
         }
     }
 
@@ -91,6 +100,7 @@ impl Dialog {
             picture_inbox: None,
             picture_target: None,
             back: None,
+            focus: None,
         }
     }
 
@@ -535,7 +545,8 @@ impl Dialog {
                     Number { key: "percent", label: "Custom (%):" },
                 ],
                 json!({"percent": app.session.active().and_then(|d| d.wb.active().map(|s| s.zoom)).unwrap_or(100)}),
-            ),
+            )
+            .with_focus("percent"),
             "defineName" => {
                 // Name Manager › Edit… passes the name being edited (`oldName`, `oldScope`) and
                 // its current fields; New… and Define Name start from the selection.
@@ -1426,6 +1437,14 @@ fn form_fields(ui: &mut egui::Ui, d: &mut Dialog) {
                     ui.horizontal(|ui| {
                         ui.label(label);
                         let mut n = d.values.get(key).and_then(Json::as_f64).unwrap_or(0.0);
+                        // Focused before it's drawn, the box opens as text with the number
+                        // selected, so typing replaces it. Not in the window's first, invisible
+                        // sizing pass: egui drops focus requested there.
+                        if d.focus == Some(key) && ui.is_visible() && !ui.is_sizing_pass() {
+                            let id = ui.next_auto_id();
+                            ui.memory_mut(|m| m.request_focus(id));
+                            d.focus = None;
+                        }
                         if ui.add(egui::DragValue::new(&mut n).speed(0.5)).changed() {
                             d.values.insert(key.into(), json!(n));
                         }

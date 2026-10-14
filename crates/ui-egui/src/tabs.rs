@@ -267,7 +267,7 @@ pub fn status_bar(app: &mut SheetApp, ui: &mut Ui) {
                     let zl = ui.add(
                         egui::Label::new(egui::RichText::new(format!("{zoom}%")).font(theme::ui_font(12.5)).color(t.text_dim)).sense(Sense::click()),
                     );
-                    if zl.clicked() {
+                    if zl.on_hover_cursor(egui::CursorIcon::PointingHand).clicked() {
                         app.open_dialog("zoom", json!({}));
                     }
                     ui.add_space(4.0);
