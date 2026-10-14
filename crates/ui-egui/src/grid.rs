@@ -2258,7 +2258,9 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
 
     // Release.
     if resp.drag_stopped() || (!pointer.any_down() && app.grid.drag != Drag::None && !resp.dragged()) {
-        match std::mem::take(&mut app.grid.drag) {
+        let drag = std::mem::take(&mut app.grid.drag);
+        let selected = drag == Drag::Select;
+        match drag {
             Drag::Select if resp.drag_stopped() => {
                 if let Some(p) = pos {
                     select_to_pointer(app, geo, sh, wb, p);
@@ -2297,6 +2299,9 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
             _ => {}
         }
         app.grid.drag_select = false;
+        if selected {
+            apply_format_painter(app);
+        }
     }
 
     // Right-click: context menu.
@@ -2329,6 +2334,16 @@ fn interact(app: &mut SheetApp, ui: &mut egui::Ui, resp: &egui::Response, geo: &
         resp.request_focus();
     }
     keyboard(app, &ctx, resp, geo, sh);
+}
+
+/// Format Painter: once a format is picked up, the cells just selected (by a click, a drag or an
+/// arrow key) take it.
+fn apply_format_painter(app: &mut SheetApp) {
+    if app.session.format_painter.is_none() {
+        return;
+    }
+    let Some(dest) = app.session.active().map(|d| d.selection.current().a1()) else { return };
+    app.run_or_alert("edit.formatPainter", json!({"apply": dest}));
 }
 
 /// Point mode on a header: inserts the whole-column or whole-row reference instead of selecting.
@@ -2619,6 +2634,10 @@ fn keyboard(app: &mut SheetApp, ctx: &egui::Context, resp: &egui::Response, geo:
                     let _ = app.session.run("selection.move", json!({"dr": dr, "dc": dc, "extend": shift, "jump": cmd}));
                     app.grid.ensure_visible = true;
                     app.grid.reveal_moving_end = shift;
+                    // Moving to a cell puts a picked-up format down there, like clicking it.
+                    if !shift {
+                        apply_format_painter(app);
+                    }
                 };
                 match key {
                     Key::ArrowUp => mv(app, -1, 0),

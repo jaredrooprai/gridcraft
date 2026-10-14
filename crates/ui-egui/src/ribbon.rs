@@ -70,7 +70,7 @@ pub fn title_bar(app: &mut SheetApp, ui: &mut Ui) {
             if __k.clicked() {
                 app.open_dialog("start", json!({}));
             }
-            if icon_button(ui, Icon::Save, t.text_dim, "Save (⌘S)", vec2(26.0, ch)).clicked()
+            if icon_button(ui, Icon::Save, t.text_dim, "Save", vec2(26.0, ch)).clicked()
                 // File operations must include the cell the user is still editing (as the File > Save menu item already does).
                 && app.commit_edit(0, 0, false, false)
             {
@@ -570,7 +570,7 @@ fn home(app: &mut SheetApp, ui: &mut Ui) {
             app.copy_to_clipboard(ui.ctx(), "edit.copy");
         }
         let fp_on = app.session.format_painter.is_some();
-        let fp = toggle_button(ui, Icon::Brush, fp_on, "Format Painter (double-click to keep it on)");
+        let fp = toggle_button(ui, Icon::Brush, fp_on, "Format Painter (⌘S; double-click to keep it on)");
         control_keytip(app, ui, &fp, "edit.formatPainter");
         if fp.double_clicked() {
             act(app, "edit.formatPainter", json!({"sticky": true}));
@@ -2441,7 +2441,13 @@ pub fn shortcut(app: &mut SheetApp, key: Key, m: Modifiers) {
         Key::D => Some(("edit.fillDown", json!({}))),
         Key::R => Some(("edit.fillRight", json!({}))),
         Key::S if shift => Some(("file.saveAs", json!({}))),
-        Key::S => Some(("file.save", json!({}))),
+        // This fork: Cmd+S picks up the active cell's format for the next cell clicked or moved
+        // to (Format Painter), and again puts it down; Save is on the File menu.
+        Key::S if app.session.format_painter.is_some() => {
+            app.session.format_painter = None;
+            None
+        }
+        Key::S => Some(("edit.formatPainter", json!({}))),
         Key::O => Some(("file.open", json!({}))),
         Key::N => Some(("file.new", json!({}))),
         Key::W => Some(("file.close", json!({}))),

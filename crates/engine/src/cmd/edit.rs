@@ -107,7 +107,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "edit.formatPainter",
             "Format Painter",
             ["Home", "Clipboard"],
-            None,
+            Some("Cmd+S"),
             "{sticky?: bool} — first call picks up the selection's formats; with {apply: \"C3:D4\"} pastes them",
             has_doc,
             format_painter

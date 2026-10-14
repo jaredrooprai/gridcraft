@@ -1130,3 +1130,34 @@ fn delete_clears_the_cell_without_editing_it() {
     assert_eq!(value(&h, "B2"), Value::Empty);
     assert!(h.state().editor.is_none());
 }
+
+#[test]
+fn cmd_s_picks_up_the_format_for_the_next_cell_clicked_or_moved_to() {
+    let mut s = blank();
+    s.execute("home.bold", json!({"range": "B2"})).unwrap();
+    s.execute("selection.set", json!({"cell": "B2"})).unwrap();
+    let mut h = harness(s);
+    let bold = |h: &egui_kittest::Harness<'static, SheetApp>, a: &str| {
+        h.state().session.active().and_then(|d| d.wb.active().map(|sh| d.wb.styles.get(sh.style_id(CellRef::parse(a).unwrap())).font.bold))
+    };
+    // Cmd+S picks up B2's format; moving down puts it on B3 and ends the painter.
+    key(&mut h, Key::S, Modifiers::COMMAND);
+    assert!(h.state().session.format_painter.is_some());
+    key(&mut h, Key::ArrowDown, Modifiers::NONE);
+    assert_eq!(bold(&h, "B3"), Some(true));
+    assert!(h.state().session.format_painter.is_none());
+    key(&mut h, Key::ArrowDown, Modifiers::NONE);
+    assert_eq!(bold(&h, "B4"), Some(false));
+    // Pick up B2 again and click D3.
+    h.state_mut().session.run("selection.set", json!({"cell": "B2"})).unwrap();
+    key(&mut h, Key::S, Modifiers::COMMAND);
+    click_cell(&mut h, "D3");
+    assert_eq!(bold(&h, "D3"), Some(true));
+    assert!(h.state().session.format_painter.is_none());
+    // Cmd+S twice cancels without painting; nothing is saved.
+    key(&mut h, Key::S, Modifiers::COMMAND);
+    key(&mut h, Key::S, Modifiers::COMMAND);
+    assert!(h.state().session.format_painter.is_none());
+    key(&mut h, Key::ArrowRight, Modifiers::NONE);
+    assert_eq!(bold(&h, "E3"), Some(false));
+}

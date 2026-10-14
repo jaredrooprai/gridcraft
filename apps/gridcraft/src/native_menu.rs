@@ -22,7 +22,7 @@ fn tree() -> Vec<(&'static str, Vec<Entry>)> {
                 ("Open…", "file.open", Some("CMD+O")),
                 ("-", "", None),
                 ("Close", "file.close", Some("CMD+W")),
-                ("Save", "file.save", Some("CMD+S")),
+                ("Save", "file.save", None), // Cmd+S is Format Painter in this fork
                 ("Save As…", "file.saveAs", Some("CMD+SHIFT+S")),
                 ("Export as PDF…", "file.exportPdf", None),
                 ("Export as CSV…", "dialog:saveCopy:csv", None),

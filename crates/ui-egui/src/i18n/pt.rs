@@ -915,7 +915,6 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Print Titles" => "Imprimir Títulos",
         "Protect Workbook structure" => "Proteger estrutura da pasta de trabalho",
         "Redo (⌘Y)" => "Refazer (⌘Y)",
-        "Save (⌘S)" => "Salvar (⌘S)",
         "Scatter or Bubble" => "Dispersão ou Bolhas",
         "Search and run any command" => "Pesquisar e executar qualquer comando",
         "Search commands (⌘⇧Space)" => "Pesquisar comandos (⌘⇧Space)",

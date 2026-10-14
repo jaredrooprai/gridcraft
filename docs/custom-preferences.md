@@ -218,6 +218,29 @@ Where it lived: the `Key::Backspace` arm of the grid's keyboard handler in
 
 Test: `delete_clears_the_cell_without_editing_it`.
 
+## 12. Cmd+S is Format Painter (Save has no shortcut)
+
+This deliberately differs from Excel.
+
+- **Cmd+S picks up the active cell's format**, like clicking the Format Painter brush. Pressing
+  Cmd+S again before using it cancels.
+- **The next cell clicked, dragged across or moved to with an arrow key takes the format.** The
+  painter then ends. Shift+arrow (extending the selection) doesn't paint. Double-clicking the brush
+  still keeps it on for several targets.
+- **Save has no keyboard shortcut.** Use File › Save in the menu bar. Cmd+Shift+S is still
+  Save As. The native menu's Save item has no accelerator, so it doesn't swallow Cmd+S.
+- **Applying on click was missing upstream.** At the time of writing, upstream's grid never
+  applied a picked-up format on click; `apply_format_painter` in `crates/ui-egui/src/grid.rs`
+  added it, called on mouse release after a selection and after a plain arrow move.
+
+Where it lived:
+- `shortcut()` in `crates/ui-egui/src/ribbon.rs` (Cmd+S)
+- `apply_format_painter` in `crates/ui-egui/src/grid.rs`
+- the Save entry in `apps/gridcraft/src/native_menu.rs`
+- the shortcut metadata of `file.save` and `edit.formatPainter` in `crates/engine/src/cmd/`
+
+Test: `cmd_s_picks_up_the_format_for_the_next_cell_clicked_or_moved_to`.
+
 ## Keeping this file current
 
 When a new preference lands on this fork, add a section here in the same shape: the behaviour,
