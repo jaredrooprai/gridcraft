@@ -2920,11 +2920,15 @@ fn context_menu(app: &mut SheetApp, ui: &mut egui::Ui) {
     }
 }
 
-/// Used by `EditState` users to keep the active cell visible while pointing.
-pub fn point_move(app: &mut SheetApp, ed: &mut EditState, dr: i64, dc: i64, extend: bool) {
+/// Used by `EditState` users to keep the active cell visible while pointing. With `jump`
+/// (Cmd/Ctrl+arrow) it goes to the edge of the data region, as moving the selection does.
+pub fn point_move(app: &mut SheetApp, ed: &mut EditState, dr: i64, dc: i64, extend: bool, jump: bool) {
     let Some(d) = app.session.active() else { return };
     let from = ed.point_origin();
-    let to = from.offset_clamped(dr, dc);
+    let to = match d.wb.sheet(ed.sheet) {
+        Some(sh) if jump => gridcraft_engine::selection::jump(sh, from, dr, dc),
+        _ => from.offset_clamped(dr, dc),
+    };
     let text = if extend {
         // The anchor is the corner opposite the moving end: the written range is normalized, so
         // after extending up or left its first cell is the moving end, not the anchor.
@@ -2941,7 +2945,6 @@ pub fn point_move(app: &mut SheetApp, ed: &mut EditState, dr: i64, dc: i64, exte
     } else {
         to.a1()
     };
-    let _ = d;
     ed.insert_ref(&text);
     ed.point_cell = Some(to);
     app.grid.ensure_visible = true;

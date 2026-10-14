@@ -216,9 +216,10 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
                 i.key_pressed(Key::ArrowLeft),
                 i.key_pressed(Key::ArrowRight),
                 i.modifiers.shift,
+                i.modifiers.command,
             )
         });
-        let (up, down, left, right, ashift) = arrows;
+        let (up, down, left, right, ashift, acmd) = arrows;
         if (up || down) && !ed.autocomplete.is_empty() {
             ui.input_mut(|i| {
                 i.consume_key(egui::Modifiers::NONE, Key::ArrowUp);
@@ -244,9 +245,11 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
                     for k in [Key::ArrowUp, Key::ArrowDown, Key::ArrowLeft, Key::ArrowRight] {
                         i.consume_key(egui::Modifiers::NONE, k);
                         i.consume_key(egui::Modifiers::SHIFT, k);
+                        i.consume_key(egui::Modifiers::COMMAND, k);
+                        i.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, k);
                     }
                 });
-                crate::grid::point_move(app, &mut ed, dr, dc, ashift);
+                crate::grid::point_move(app, &mut ed, dr, dc, ashift, acmd);
             } else {
                 action = Some((dr, dc, false, false));
             }

@@ -277,6 +277,26 @@ fn shift_arrows_in_point_mode_extend_from_the_pointed_cell() {
 }
 
 #[test]
+fn cmd_arrows_in_point_mode_jump_to_the_data_edge() {
+    let mut s = blank();
+    s.execute("range.setValues", json!({"range": "A1:A5", "values": [[1], [2], [3], [4], [5]]})).unwrap();
+    s.execute("selection.set", json!({"cell": "A8"})).unwrap();
+    let mut h = harness(s);
+    let edited = |h: &egui_kittest::Harness<'static, SheetApp>| h.state().editor.as_ref().map(|e| e.text.clone());
+    text(&mut h, "+");
+    h.input_mut().events.push(Event::ModifiersChanged(Modifiers::COMMAND));
+    key(&mut h, Key::ArrowUp, Modifiers::COMMAND);
+    assert_eq!(edited(&h).as_deref(), Some("+A5"), "jumps over the blanks to the end of the data");
+    key(&mut h, Key::ArrowUp, Modifiers::COMMAND);
+    assert_eq!(edited(&h).as_deref(), Some("+A1"), "then to the top of the data");
+    h.input_mut().events.push(Event::ModifiersChanged(Modifiers::NONE));
+    text(&mut h, "+");
+    h.input_mut().events.push(Event::ModifiersChanged(Modifiers::COMMAND));
+    key(&mut h, Key::ArrowUp, Modifiers::COMMAND);
+    assert_eq!(edited(&h).as_deref(), Some("+A1+A5"), "a new reference jumps from the edited cell");
+}
+
+#[test]
 fn shortcuts_format_and_extend() {
     let mut s = blank();
     s.execute("range.setValues", json!({"range": "A1", "values": [[1, 2], [3, 4]]})).unwrap();
