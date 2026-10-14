@@ -923,8 +923,21 @@ fn clicking_the_zoom_percentage_puts_the_cursor_in_the_custom_box() {
     text(&mut h, "150");
     key(&mut h, Key::Enter, Modifiers::NONE);
     h.run_steps(3);
-    let zoom = h.state().session.active().and_then(|d| d.wb.active().map(|s| s.zoom));
-    assert_eq!(zoom, Some(150));
+    let zoom = |h: &egui_kittest::Harness<'static, SheetApp>| h.state().session.active().and_then(|d| d.wb.active().map(|s| s.zoom));
+    assert_eq!(zoom(&h), Some(150));
+    // And every time after, not just the first.
+    for want in [80, 125] {
+        h.get_by_label("150%").click();
+        h.run_steps(3);
+        assert_eq!(h.state().dialog.as_ref().map(|d| d.name().to_string()).as_deref(), Some("zoom"));
+        text(&mut h, &want.to_string());
+        key(&mut h, Key::Enter, Modifiers::NONE);
+        h.run_steps(3);
+        assert_eq!(zoom(&h), Some(want));
+        // Back to 150 for the next round, through the dialog too.
+        h.state_mut().session.run("view.zoom", json!({"percent": 150})).unwrap();
+        h.run_steps(2);
+    }
 }
 
 #[test]

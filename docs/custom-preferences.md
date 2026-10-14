@@ -188,7 +188,10 @@ Clicking the zoom percentage in the status bar does three things:
 - the current value is selected, so typing a number and pressing Enter sets the zoom
 
 Mechanism: `Dialog::with_focus`. Focus is requested just before the box is drawn, not during the
-window's first, invisible sizing pass, where egui drops it.
+window's first, invisible sizing pass, where egui drops it. It is requested again each frame until
+the box has it: from the second opening on, the window's size is remembered, so there is no sizing
+pass, and the first request was lost (most likely to the click that opened the dialog). The test opens Zoom three
+times.
 
 Test: `clicking_the_zoom_percentage_puts_the_cursor_in_the_custom_box`.
 
@@ -241,9 +244,6 @@ Where it lived:
 
 Test: `cmd_s_picks_up_the_format_for_the_next_cell_clicked_or_moved_to`.
 
-## Keeping this file current
-
-When a new preference lands on this fork, add a section here in the same shape: the behaviour,
 ## 13. Frozen panes keep their gridlines when scrolled (fix)
 
 This is a bug fix rather than a preference; check whether upstream has fixed it before porting.
@@ -256,4 +256,7 @@ Where it lived: `gridlines()` (used by `paint_quadrant`) in `crates/ui-egui/src/
 
 Test: `frozen_panes_keep_their_gridlines_when_scrolled`.
 
+## Keeping this file current
+
+When a new preference lands on this fork, add a section here in the same shape: the behaviour,
 where it lived, its tests and its commit.

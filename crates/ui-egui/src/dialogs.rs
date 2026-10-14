@@ -1439,11 +1439,16 @@ fn form_fields(ui: &mut egui::Ui, d: &mut Dialog) {
                         let mut n = d.values.get(key).and_then(Json::as_f64).unwrap_or(0.0);
                         // Focused before it's drawn, the box opens as text with the number
                         // selected, so typing replaces it. Not in the window's first, invisible
-                        // sizing pass: egui drops focus requested there.
+                        // sizing pass: egui drops focus requested there. Asked again until the box
+                        // has it: the click that opened the dialog can take a first request away
+                        // (when the window's size is remembered there is no sizing pass to wait).
                         if d.focus == Some(key) && ui.is_visible() && !ui.is_sizing_pass() {
                             let id = ui.next_auto_id();
-                            ui.memory_mut(|m| m.request_focus(id));
-                            d.focus = None;
+                            if ui.memory(|m| m.has_focus(id)) {
+                                d.focus = None;
+                            } else {
+                                ui.memory_mut(|m| m.request_focus(id));
+                            }
                         }
                         if ui.add(egui::DragValue::new(&mut n).speed(0.5)).changed() {
                             d.values.insert(key.into(), json!(n));
