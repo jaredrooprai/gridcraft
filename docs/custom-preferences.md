@@ -230,28 +230,29 @@ Where it lived: the `Key::Backspace` arm of the grid's keyboard handler in
 
 Test: `delete_clears_the_cell_without_editing_it`.
 
-## 12. Cmd+S is Format Painter (Save has no shortcut)
+## 12. Control+Shift+C is Format Painter, and the painter applies on click or arrow move
 
-This deliberately differs from Excel.
+This deliberately differs from Excel. (From 2026-10-14 to 2026-10-19, Cmd+S was the painter and Save
+had no shortcut; the user moved it back. Cmd+S is Save, as in Excel.)
 
-- **Cmd+S picks up the active cell's format**, like clicking the Format Painter brush. Pressing
-  Cmd+S again before using it cancels.
+- **Control+Shift+C picks up the active cell's format**, like clicking the Format Painter brush.
+  Pressing it again before using it cancels. It's Control, not Command. On Windows and Linux
+  egui turns Ctrl+Shift+C into Copy, so in practice it's macOS only.
 - **The next cell clicked, dragged across or moved to with an arrow key takes the format.** The
   painter then ends. Shift+arrow (extending the selection) doesn't paint. Double-clicking the brush
   still keeps it on for several targets.
-- **Save has no keyboard shortcut.** Use File › Save in the menu bar. Cmd+Shift+S is still
-  Save As. The native menu's Save item has no accelerator, so it doesn't swallow Cmd+S.
-- **Applying on click was missing upstream.** At the time of writing, upstream's grid never
-  applied a picked-up format on click; `apply_format_painter` in `crates/ui-egui/src/grid.rs`
-  added it, called on mouse release after a selection and after a plain arrow move.
+- **Applying on click was missing upstream.** At the time of writing, upstream's grid never applied
+  a picked-up format on click; `apply_format_painter` in `crates/ui-egui/src/grid.rs` added it,
+  called on mouse release after a selection and after a plain arrow move.
 
 Where it lived:
-- `shortcut()` in `crates/ui-egui/src/ribbon.rs` (Cmd+S)
+- `Shortcut::FormatPainter` in `crates/ui-egui/src/keymap.rs` (the key and the toggle)
 - `apply_format_painter` in `crates/ui-egui/src/grid.rs`
-- the Save entry in `apps/gridcraft/src/native_menu.rs`
-- the shortcut metadata of `file.save` and `edit.formatPainter` in `crates/engine/src/cmd/`
+- the `edit.formatPainter` shortcut metadata (`Ctrl+Shift+C`) in `crates/engine/src/cmd/edit.rs`
+- the brush tooltip in `crates/ui-egui/src/ribbon.rs`
 
-Test: `cmd_s_picks_up_the_format_for_the_next_cell_clicked_or_moved_to`.
+Test: `control_shift_c_picks_up_the_format_for_the_next_cell_clicked_or_moved_to` (which also
+checks that Cmd+S doesn't pick up the painter).
 
 ## 13. Frozen panes keep their gridlines when scrolled (fix)
 
@@ -270,10 +271,8 @@ Test: `frozen_panes_keep_their_gridlines_when_scrolled`.
 Last merged: upstream 0.8.0, on 2026-10-19. Things to watch when merging:
 
 - **Conflicts so far:** the keyboard shortcuts in `ribbon.rs` (section 2), `KeypadKey` next to new
-  structs in `crates/ui-egui/src/lib.rs`, the `file.save` shortcut metadata (section 12), and tests
-  appended to the end of `crates/ui-egui/tests/interaction.rs` (keep both sides).
-- **Translations of "Save (⌘S)":** the Save button's label is plain "Save" here, so a translation
-  keyed on "Save (⌘S)" is dead. Remove it; every language already translates "Save".
+  structs in `crates/ui-egui/src/lib.rs`, and tests appended to the end of
+  `crates/ui-egui/tests/interaction.rs` (keep both sides).
 - **Clippy on macOS:** upstream's CI runs clippy on Linux. In 0.8.0 `desktop_theme.rs` bound a
   `()` value off Linux; the fork allows `clippy::let_unit_value` on that one line for non-Linux
   builds.

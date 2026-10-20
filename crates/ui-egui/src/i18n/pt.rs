@@ -341,6 +341,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Open" => "Abrir",
         "Info" => "Informações",
         "Save" => "Salvar",
+        "Save (⌘S)" => "Salvar (⌘S)",
         "Save As" => "Salvar como",
         "Export" => "Exportar",
         "Close" => "Fechar",

@@ -39,6 +39,9 @@ pub enum Shortcut {
     DropDown,
     /// Ctrl+Alt+= / Ctrl+Alt+-: zoom in / out.
     Zoom(i32),
+    /// This fork: Control+Shift+C picks up the active cell's format for the next cell clicked or
+    /// moved to (Format Painter); pressed again before that, it puts the format down.
+    FormatPainter,
 }
 
 fn run(id: &'static str) -> Shortcut {
@@ -73,6 +76,9 @@ pub fn lookup(key: Key, physical: Option<Key>, m: Modifiers, mac: bool) -> Optio
         // Ctrl+Shift+~ ! @ # $ % ^ & _ : number formats and borders (Windows and Mac).
         Backtick if ctrl && s => Shortcut::Run("home.numberFormat", json!({"format": "General"})),
         Num1 if ctrl && s => number_format("#,##0.00"),
+        // Control itself, not Cmd: Cmd+Shift+C is free for the system. On Windows and Linux
+        // Ctrl+Shift+C arrives as Copy, so this is macOS in practice.
+        C if ctrl && s && !m.command => Shortcut::FormatPainter,
         Num2 if ctrl && s => number_format("h:mm AM/PM"),
         Num3 if ctrl && s => number_format("d-mmm-yy"),
         Num4 if ctrl && s => number_format("$#,##0.00_);($#,##0.00)"),
@@ -181,6 +187,8 @@ pub(crate) fn dispatch(app: &mut SheetApp, ctx: &egui::Context, key: Key, physic
             app.grid.ensure_visible = true;
         }
         Shortcut::Dialog(name, params) => app.open_dialog(name, params),
+        Shortcut::FormatPainter if app.session.format_painter.is_some() => app.session.format_painter = None,
+        Shortcut::FormatPainter => app.run_or_alert("edit.formatPainter", json!({})),
         Shortcut::Date | Shortcut::Time => {
             let text = app
                 .session

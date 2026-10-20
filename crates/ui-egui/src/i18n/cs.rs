@@ -254,6 +254,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Open" => "Otevřít",
         "Info" => "Informace",
         "Save" => "Uložit",
+        "Save (⌘S)" => "Uložit (⌘S)",
         "Save As" => "Uložit jako",
         "Export" => "Exportovat",
         "Close" => "Zavřít",
