@@ -112,8 +112,12 @@ Commits: `118b050`, `5894e53` (keypad part), `be39910`.
   keypad wrapper takes `NumpadAdd`/`NumpadSubtract` while Command is physically held, with Num
   Lock mode on or off, unless typing.
 
-Where it lived: `crates/ui-egui/src/ribbon.rs`, in `shortcut()`, `whole_lines()` and
-`insert_lines()`.
+Where it lived: `crates/ui-egui/src/ribbon.rs`, in `shortcut()` and `insert_lines()`.
+
+Upstream 0.8.0 added Excel's version of this (Ctrl+Shift+= and Ctrl+− on whole rows or columns,
+with `whole_lines()` covering several areas and `single_area()` sending a multi-area insert to the
+dialog). The fork keeps upstream's checks and adds only two things on top: keypad + (a `Key::Plus`
+without Shift) inserts, and Cmd+= inserts when whole rows or columns are selected.
 
 Tests: `cmd_plus_and_minus_insert_and_delete_whole_rows_and_columns` and
 `command_keypad_plus_and_minus_insert_and_delete_whole_rows`.
@@ -169,6 +173,11 @@ Where it lived: `crates/engine/src/cmd/edit.rs` and `crates/engine/src/lib.rs`, 
 preference also threaded through `fill.rs` and `cmd/print.rs`.
 
 Commit: `055fd75`.
+
+**Upstream tests:** upstream's engine tests assume Excel's General default. A test file that types
+numbers and checks their format sets `s.prefs.default_number_format = "General"` in its session
+helper (as `crates/engine/src/tests.rs` and `crates/engine/tests/range_fill_formats.rs` do). Do the
+same for any new upstream test that fails on `#,##0` versus `General`.
 
 ## 7. Control+R and Control+D fill right and down on macOS
 
@@ -255,6 +264,20 @@ pane's far edges now come from its own last column and row.
 Where it lived: `gridlines()` (used by `paint_quadrant`) in `crates/ui-egui/src/grid.rs`.
 
 Test: `frozen_panes_keep_their_gridlines_when_scrolled`.
+
+## Merging upstream
+
+Last merged: upstream 0.8.0, on 2026-10-19. Things to watch when merging:
+
+- **Conflicts so far:** the keyboard shortcuts in `ribbon.rs` (section 2), `KeypadKey` next to new
+  structs in `crates/ui-egui/src/lib.rs`, the `file.save` shortcut metadata (section 12), and tests
+  appended to the end of `crates/ui-egui/tests/interaction.rs` (keep both sides).
+- **Translations of "Save (⌘S)":** the Save button's label is plain "Save" here, so a translation
+  keyed on "Save (⌘S)" is dead. Remove it; every language already translates "Save".
+- **Clippy on macOS:** upstream's CI runs clippy on Linux. In 0.8.0 `desktop_theme.rs` bound a
+  `()` value off Linux; the fork allows `clippy::let_unit_value` on that one line for non-Linux
+  builds.
+- **The wasm step** of `cargo xtask ci` needs `rustup target add wasm32-unknown-unknown`.
 
 ## Keeping this file current
 

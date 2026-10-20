@@ -493,7 +493,6 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Redo (⌘Y)" => "Znovu (⌘Y)",
         "Remove Duplicates" => "Odebrat duplicity",
         "Rename Sheet" => "Přejmenovat list",
-        "Save (⌘S)" => "Uložit (⌘S)",
         "Scatter or Bubble" => "Bodový nebo bublinový graf",
         "Search and run any command" => "Vyhledat a spustit libovolný příkaz",
         "Search commands (⌘⇧Space)" => "Vyhledat příkazy (⌘⇧Space)",
