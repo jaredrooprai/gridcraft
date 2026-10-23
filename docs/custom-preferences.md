@@ -247,6 +247,20 @@ egui moves focus as each widget is drawn.
 
 Tests: `crates/ui-egui/tests/it/format_cells_keyboard.rs`.
 
+## 16. Option+Left and Option+Right change the decimal places
+
+This deliberately differs from Excel for Mac, where Option+Right and Option+Left go to the next and
+previous sheet. On macOS, with the grid focused, Option+Left runs `home.increaseDecimal` and
+Option+Right runs `home.decreaseDecimal` (`#,##0` → `#,##0.0` → `#,##0.00`). Cmd+Page Down / Page Up
+(Cmd+Fn+Down / Up on a Mac keyboard) still change sheets. In a cell being edited, Option+arrow
+still moves the caret by word. Windows' Alt+Shift+Right / Left (group / ungroup) are unchanged.
+
+Where it lived: the `ArrowLeft` / `ArrowRight` `alt && !s && mac` arms of `lookup()` in
+`crates/ui-egui/src/keymap.rs`.
+
+Tests: `option_left_and_right_add_and_remove_a_decimal` (`tests/it/interaction.rs`) and the
+`lookup` assertions in `windows_and_mac_variants` (`tests/it/keyboard_shortcuts.rs`).
+
 ## Merging upstream
 
 Last merged: upstream main after 0.11.1 (`530a8cc8`), on 2026-10-23. Things to watch when merging:

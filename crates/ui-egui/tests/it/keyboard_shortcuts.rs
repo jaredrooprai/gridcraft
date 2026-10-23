@@ -98,6 +98,9 @@ fn windows_and_mac_variants() {
     assert_eq!(lookup(Key::E, Some(Key::E), ctrl, true), run("edit.flashFill"));
     assert_eq!(lookup(Key::R, Some(Key::R), ctrl, true), run("edit.fillRight"));
     assert_eq!(lookup(Key::D, Some(Key::D), ctrl, true), run("edit.fillDown"));
+    // This fork: Option+Left / Right change the decimals on a Mac, not the sheet.
+    assert_eq!(lookup(Key::ArrowLeft, None, Modifiers::ALT, true), run("home.increaseDecimal"));
+    assert_eq!(lookup(Key::ArrowRight, None, Modifiers::ALT, true), run("home.decreaseDecimal"));
     assert_eq!(lookup(Key::Equals, Some(Key::Equals), Modifiers::ALT, false), run("formulas.autoSum"));
     // The shifted character doesn't matter: Ctrl+Shift+1 is the Number format wherever `!` is.
     assert_eq!(

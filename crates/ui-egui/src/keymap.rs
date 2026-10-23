@@ -153,8 +153,10 @@ pub fn lookup(key: Key, physical: Option<Key>, m: Modifiers, mac: bool) -> Optio
         PageUp if alt => Shortcut::ScreenLeft,
         ArrowRight if alt && s && !mac => run("data.group"),
         ArrowLeft if alt && s && !mac => run("data.ungroup"),
-        ArrowRight if alt && !s && mac => run("sheet.next"),
-        ArrowLeft if alt && !s && mac => run("sheet.previous"),
+        // This fork: Option+Left / Option+Right add / remove a decimal place (Excel for Mac
+        // switches sheets with them; Cmd+Page Down / Page Up still do).
+        ArrowLeft if alt && !s && mac => run("home.increaseDecimal"),
+        ArrowRight if alt && !s && mac => run("home.decreaseDecimal"),
         F1 if alt && s => run("home.insertSheet"),
         F1 if alt => run("insert.chart"),
         F10 if alt && s => Shortcut::Dialog("errorChecking", json!({})),

@@ -1071,6 +1071,31 @@ fn command_2_opens_zoom_ready_to_type() {
 }
 
 #[test]
+fn option_left_and_right_add_and_remove_a_decimal() {
+    let mut s = blank();
+    s.execute("cell.set", json!({"cell": "B2", "input": "1234.5678"})).unwrap();
+    s.execute("home.numberFormat", json!({"range": "B2", "code": "#,##0"})).unwrap();
+    s.execute("selection.set", json!({"cell": "B2"})).unwrap();
+    let mut h = harness(s);
+    h.ctx.set_os(egui::os::OperatingSystem::Mac);
+    let format = |h: &egui_kittest::Harness<'static, SheetApp>| {
+        let d = h.state().session.active().unwrap();
+        let sh = d.wb.active().unwrap();
+        d.wb.styles.get(sh.style_id(CellRef::parse("B2").unwrap())).num_fmt.as_str().to_string()
+    };
+    let sheet = |h: &egui_kittest::Harness<'static, SheetApp>| h.state().session.active().map(|d| d.wb.active_sheet);
+    let before = sheet(&h);
+    h.input_mut().events.push(Event::ModifiersChanged(Modifiers::ALT));
+    key(&mut h, Key::ArrowLeft, Modifiers::ALT);
+    key(&mut h, Key::ArrowLeft, Modifiers::ALT);
+    assert_eq!(format(&h), "#,##0.00");
+    key(&mut h, Key::ArrowRight, Modifiers::ALT);
+    assert_eq!(format(&h), "#,##0.0");
+    assert_eq!(sheet(&h), before, "the sheet didn't change");
+    assert!(h.state().editor.is_none());
+}
+
+#[test]
 fn control_r_fills_the_first_cells_formula_across_the_selection() {
     let mut s = blank();
     s.execute("range.setValues", json!({"range": "A1:D1", "values": [[1, 2, 3, 4]]})).unwrap();
