@@ -13,8 +13,6 @@ mod apple_events;
 mod control_server;
 #[cfg(any(target_os = "windows", test))]
 mod graphics;
-#[cfg(target_os = "macos")]
-mod keypad;
 mod logging;
 #[cfg(target_os = "macos")]
 mod native_menu;
@@ -27,12 +25,7 @@ use gridcraft_engine::Session;
 use gridcraft_ui_egui::{Services, SheetApp};
 use serde_json::json;
 
-struct App(
-    SheetApp,
-    #[cfg(target_os = "macos")] Option<native_menu::NativeMenu>,
-    #[cfg(target_os = "macos")] fmv_macos_events::Inbox,
-    #[cfg(target_os = "macos")] keypad::Handle,
-);
+struct App(SheetApp, #[cfg(target_os = "macos")] Option<native_menu::NativeMenu>, #[cfg(target_os = "macos")] fmv_macos_events::Inbox);
 
 impl eframe::App for App {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -52,17 +45,8 @@ impl eframe::App for App {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
     }
-    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
-    fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw: &mut egui::RawInput) {
         self.0.raw_input_hook(raw);
-        #[cfg(target_os = "macos")]
-        if let Ok(mut k) = self.3.lock() {
-            // Shown off while a cell is edited (after 7), except while pointing, and back on
-            // when the edit ends.
-            self.0.keypad_arrows = k.navigating();
-            let keys = std::mem::take(&mut k.keys);
-            self.0.keypad_input(&keys, ctx.input(|i| i.modifiers), raw);
-        }
         // Files dropped on the window open as workbooks.
         for f in std::mem::take(&mut raw.dropped_files) {
             if let Some(p) = f.path().to_str().map(str::to_string).filter(|p| !p.is_empty()) {
@@ -72,13 +56,6 @@ impl eframe::App for App {
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.0.ui(ui);
-        // While a cell is edited or a dialog is open the keypad types digits, not Num Lock
-        // navigation (keypad.rs), except while a formula waits for a reference (after = + -),
-        // when the keypad arrows point at cells. Num Lock mid-edit brings the arrows back.
-        #[cfg(target_os = "macos")]
-        if let Ok(mut k) = self.3.lock() {
-            k.set_typing((self.0.editor.is_some() && !self.0.keypad_points()) || self.0.dialog.is_some());
-        }
     }
     fn on_exit(&mut self) {
         print::finish_pending_jobs();
@@ -365,47 +342,30 @@ fn main() -> eframe::Result<()> {
     // The app waits here until a start gets as far as creating it; a start that fails before
     // (no graphics adapter, device or surface) leaves it here for the next attempt.
     let pending = std::cell::Cell::new(Some(app));
-    #[cfg(target_os = "macos")]
-    let keypad = keypad::Handle::default();
     let run = |options: eframe::NativeOptions| {
-        let creator: eframe::AppCreator<'_> = Box::new(|cc| {
-            let Some(mut app) = pending.take() else {
-                return Err("the app was already created".into());
-            };
-            SheetApp::setup_context_for_language(&cc.egui_ctx, app.ui.dark, app.ui.language);
-            if let Some(port) = control_port {
-                match control_server::start(port, cc.egui_ctx.clone()) {
-                    Ok(rx) => app.control_rx = Some(rx),
-                    Err(e) => log::error!("control channel on port {port}: {e}"),
+        eframe::run_native(
+            "GridCraft",
+            options,
+            Box::new(|cc| {
+                let Some(mut app) = pending.take() else {
+                    return Err("the app was already created".into());
+                };
+                SheetApp::setup_context_for_language(&cc.egui_ctx, app.ui.dark, app.ui.language);
+                if let Some(port) = control_port {
+                    match control_server::start(port, cc.egui_ctx.clone()) {
+                        Ok(rx) => app.control_rx = Some(rx),
+                        Err(e) => log::error!("control channel on port {port}: {e}"),
+                    }
                 }
-            }
-            #[cfg(target_os = "macos")]
-            if let Ok(mut k) = keypad.lock() {
-                k.ctx = Some(cc.egui_ctx.clone());
-            }
-            Ok(Box::new(App(
-                app,
-                #[cfg(target_os = "macos")]
-                None,
-                #[cfg(target_os = "macos")]
-                apple_events.connect(&cc.egui_ctx),
-                #[cfg(target_os = "macos")]
-                keypad.clone(),
-            )))
-        });
-        // On macOS GridCraft runs eframe's winit application in its own event loop, so the Num
-        // Lock keypad keys can be read before egui drops them (keypad.rs). Elsewhere eframe runs
-        // it, which also reports graphics errors for the Windows fallback below.
-        #[cfg(target_os = "macos")]
-        {
-            use winit::platform::run_on_demand::EventLoopExtRunOnDemand as _;
-            let mut event_loop = winit::event_loop::EventLoop::<eframe::UserEvent>::with_user_event().build()?;
-            let mut app = keypad::Keypad::new(eframe::create_native("GridCraft", options, creator, &event_loop), keypad.clone());
-            event_loop.run_app_on_demand(&mut app)?;
-            Ok(())
-        }
-        #[cfg(not(target_os = "macos"))]
-        eframe::run_native("GridCraft", options, creator)
+                Ok(Box::new(App(
+                    app,
+                    #[cfg(target_os = "macos")]
+                    None,
+                    #[cfg(target_os = "macos")]
+                    apple_events.connect(&cc.egui_ctx),
+                )))
+            }),
+        )
     };
     let result = run(options);
     // A graphics error before the app existed: start once more with the other backend (eframe

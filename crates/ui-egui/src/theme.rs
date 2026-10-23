@@ -57,14 +57,6 @@ pub struct Tokens {
 }
 
 impl Tokens {
-    /// The selection drawn in black (the grid is white in both themes), while Num Lock makes the
-    /// keypad navigate.
-    pub fn keypad_selection(mut self) -> Tokens {
-        self.sel_border = Color32::BLACK;
-        self.sel_fill = Color32::from_black_alpha(self.sel_fill.a());
-        self
-    }
-
     pub fn light() -> Tokens {
         Tokens {
             dark: false,

@@ -19,85 +19,15 @@ fresh checkout.
   `cargo xtask ci` passes.
 - **Commits are credited to the user alone:** no `Co-Authored-By` or other AI attribution.
 - **Commit to `main`; ask before pushing** to the `fork` remote.
-- **macOS is the primary platform.** The keypad features are macOS-only, because other platforms
-  have a real Num Lock.
+- **macOS is the primary platform.**
 
-## 1. Num Lock keypad mode (macOS)
+## 1. Num Lock keypad mode (removed)
 
-Mac keyboards have no Num Lock. On an external keypad, the Num Lock key sends Clear (key code 71),
-which winit reports as `KeyCode::NumLock` and egui drops. egui also gives keypad digits the same
-`Key` as the number row. So these keys are read from winit before eframe sees them: on macOS the
-app runs eframe's winit application through `eframe::create_native` inside its own event loop,
-wrapped by `apps/gridcraft/src/keypad.rs` (`Keypad`).
-
-**The behaviour:**
-
-1. **Num Lock toggles a keypad mode.** While it's on, the status bar shows "Keypad Arrows", and
-   the selection, fill handle and cell-editor border are drawn in **black** (not red, and not the
-   usual accent colour).
-2. **Keypad 4 8 6 2 move like the arrow keys.** Shift extends the selection, Command jumps to the
-   edge of the data, and Command+Shift extends to it.
-3. **Keypad 7 edits the active cell, like F2**, keeping its contents.
-4. **Every other keypad key types as usual.** In a dialog the keypad always types digits; for
-   example, 125 can be typed into Zoom's Custom box.
-5. **While typing into a cell opened with 7, the mode shows as off.** The keypad types digits,
-   "Keypad Arrows" disappears and the selection colour is normal. When the edit ends (Enter, Tab,
-   Esc or clicking away), the mode is back on, black, with 4 8 6 2 as arrows again. A digit typed
-   right after 7 must go into the cell, so 7 sets "typing" at once instead of waiting a frame.
-6. **After `=`, `+` or `-` the mode stays on, so cells can be picked.** This applies whenever a
-   formula is waiting for a reference: the caret follows `=`, `(`, `,`, `+`, `-`, `*`, `/`, `^`,
-   `&`, `<`, `>`, `:`, `;` or `{` (`EditState::can_point`), or follows a reference just pointed
-   at.
-   - Keypad 4 8 6 2 insert or adjust a cell reference, even though 7 opened the cell in Edit mode,
-     where arrows normally move the caret.
-   - Keypad 7 types a `7` while pointing.
-   - Once the formula no longer waits for a reference (for example a digit was typed), the
-     keypad types again.
-   - This doesn't apply in the formula bar, where keypad arrows keep moving the caret.
-   - Example: 7, `=`, 4, `+`, 4, 2 builds `=A1+A2` when editing B1.
-7. **Num Lock pressed mid-edit switches the keypad back to arrows.** The mode turns black, and a
-   keypad arrow then commits the edit and moves, as arrows do in Enter mode. Pressing Num Lock
-   again before an arrow returns to typing. If the mode was fully off when Num Lock is pressed
-   mid-edit, it turns on with arrows active. The override ends when the edit ends.
-8. **Fake modifier releases.** PC-style keypads send fake modifier releases before each keypad
-   key, so egui thinks Shift or Command is up while it's held. The wrapper tracks each modifier
-   key's own press and release and sends that state with every keypad key. Point mode in formulas
-   reads the arrow key's own modifiers.
-
-**Implementation at the time of writing:**
-
-- **`apps/gridcraft/src/keypad.rs`:** `Shared { on, keys, ctx, typing, arrows }`.
-  - `navigating() = on && (!typing || arrows)`.
-  - `num_lock()` toggles `on`. While typing it flips `arrows` instead, or turns on with `arrows`
-    set if the mode was off.
-  - `set_typing(false)` clears `arrows`.
-  - `route()` takes Num Lock, the navigation keys while navigating, and Command + keypad +/-.
-- **`apps/gridcraft/src/main.rs`:**
-  - `raw_input_hook` sets `keypad_arrows = navigating()` and feeds the queued keys to
-    `SheetApp::keypad_input`.
-  - After each frame, `ui()` calls
-    `set_typing((editor.is_some() && !keypad_points()) || dialog.is_some())`.
-- **`crates/ui-egui/src/lib.rs`:** `KeypadKey { Left, Right, Up, Down, Edit, Plus, Minus }`.
-  - `SheetApp::keypad_points()` is true when an in-cell editor (not the formula bar) can point.
-  - `keypad_input()` turns keys into egui events: arrows become arrow keys and set the editor's
-    `enter_mode`, 7 becomes F2 (or the text `"7"` while pointing), and Plus/Minus become
-    `Key::Plus`/`Key::Minus`.
-- **`crates/ui-egui/src/theme.rs`:** `Tokens::keypad_selection()` draws the black selection.
-- **`crates/ui-egui/src/tabs.rs`:** the status-bar "Keypad Arrows" label and its tooltip.
-- **winit** (the exact version eframe uses) is a direct macOS dependency of `apps/gridcraft`.
-
-**Tests:**
-
-- In `keypad.rs`:
-  - `num_lock_takes_only_the_navigation_keys`
-  - `num_lock_while_typing_switches_to_arrows_until_the_edit_ends`
-  - `command_keypad_plus_and_minus_are_taken_in_either_mode`
-- In `crates/ui-egui/tests/interaction.rs`:
-  - `num_lock_keypad_moves_like_the_arrows_and_7_edits`
-  - `keypad_arrows_point_at_cells_after_an_operator_in_a_cell_opened_with_7`
-  - `keypad_arrow_leaves_a_cell_opened_with_7`
-
-Commits: `118b050`, `5894e53` (keypad part), `be39910`.
+Removed on 2026-10-23 at the user's request; don't port it. The fork once read the keypad from
+winit before eframe (`apps/gridcraft/src/keypad.rs`, commits `118b050`, `5894e53`, `be39910`) so
+Num Lock turned keypad 4 8 6 2 into arrows and 7 into F2. The desktop app is back to upstream's
+`eframe::run_native` startup. The user now gets keypad arrows system-wide from Karabiner-Elements
+instead (Control + keypad 8/4/6/2 → arrow keys, `~/.config/karabiner/`), outside this repo.
 
 ## 2. Cmd + / Cmd − insert and delete whole rows and columns
 
@@ -108,9 +38,8 @@ Commits: `118b050`, `5894e53` (keypad part), `be39910`.
   to shift.
 - **Cmd++ can be pressed three ways:** Cmd+Shift+=, Cmd+= when whole rows or columns are
   selected, and Cmd + keypad +, which arrives without Shift.
-- **Cmd + keypad + and − must work:** see the fake Command release in section 1.8. On macOS the
-  keypad wrapper takes `NumpadAdd`/`NumpadSubtract` while Command is physically held, with Num
-  Lock mode on or off, unless typing.
+- Since section 1's keypad wrapper was removed, Cmd + keypad +/− reaches the app as egui reports
+  it. A PC-style keypad that sends a fake Command release before its keys may not trigger it.
 
 Where it lived: `crates/ui-egui/src/ribbon.rs`, in `shortcut()` and `insert_lines()`.
 
@@ -119,8 +48,7 @@ with `whole_lines()` covering several areas and `single_area()` sending a multi-
 dialog). The fork keeps upstream's checks and adds only two things on top: keypad + (a `Key::Plus`
 without Shift) inserts, and Cmd+= inserts when whole rows or columns are selected.
 
-Tests: `cmd_plus_and_minus_insert_and_delete_whole_rows_and_columns` and
-`command_keypad_plus_and_minus_insert_and_delete_whole_rows`.
+Test: `cmd_plus_and_minus_insert_and_delete_whole_rows_and_columns`.
 
 Commits: `5894e53`, `be39910`.
 
@@ -282,8 +210,7 @@ Test: `frozen_panes_keep_their_gridlines_when_scrolled`.
 
 Last merged: upstream main after 0.11.1 (`530a8cc8`), on 2026-10-23. Things to watch when merging:
 
-- **Conflicts so far:** the keyboard shortcuts in `ribbon.rs` (section 2), `KeypadKey` next to new
-  structs in `crates/ui-egui/src/lib.rs`, tests appended to the end of
+- **Conflicts so far:** the keyboard shortcuts in `ribbon.rs` (section 2), tests appended to the end of
   `crates/ui-egui/tests/it/interaction.rs` (keep both sides; it was `tests/interaction.rs` before
   0.11), and in 0.11: the in-cell editor's size (section 5), `point_move` and `point_origin`
   (section 4), the Zoom dialog (section 8), the Format Painter on release (section 12) and the
