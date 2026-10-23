@@ -158,9 +158,9 @@ pub fn lookup(key: Key, physical: Option<Key>, m: Modifiers, mac: bool) -> Optio
         F1 if alt && s => run("home.insertSheet"),
         F1 if alt => run("insert.chart"),
         F10 if alt && s => Shortcut::Dialog("errorChecking", json!({})),
-        // This fork: Option+2 opens Zoom, its Custom box ready to type. macOS only: on Windows
-        // Alt+digit belongs to the ribbon's keytips.
-        Num2 if alt && !s && mac => Shortcut::Dialog("zoom", json!({})),
+        // This fork: Cmd+2 opens Zoom, its Custom box ready to type. macOS only: on Windows
+        // Ctrl+2 is Bold.
+        Num2 if cmd && !s && mac => Shortcut::Dialog("zoom", json!({})),
         // Function keys.
         F1 if cmd && !s => run("view.collapseRibbon"),
         F2 if (cmd || ctrl) && s => Shortcut::Dialog("comment", json!({"threaded": true})),

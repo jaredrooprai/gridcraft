@@ -1050,15 +1050,14 @@ fn clicking_the_zoom_percentage_puts_the_cursor_in_the_custom_box() {
 }
 
 #[test]
-fn option_2_opens_zoom_ready_to_type() {
+fn command_2_opens_zoom_ready_to_type() {
     let mut h = harness(blank());
     h.ctx.set_os(egui::os::OperatingSystem::Mac);
-    // As macOS sends it: the key, and the character Option+2 types, which must not start an edit.
+    let cmd = Modifiers::MAC_CMD | Modifiers::COMMAND;
     h.input_mut().events.extend([
-        Event::ModifiersChanged(Modifiers::ALT),
-        Event::Key { key: Key::Num2, physical_key: Some(Key::Num2), pressed: true, repeat: false, modifiers: Modifiers::ALT },
-        Event::Text("™".into()),
-        Event::Key { key: Key::Num2, physical_key: Some(Key::Num2), pressed: false, repeat: false, modifiers: Modifiers::ALT },
+        Event::ModifiersChanged(cmd),
+        Event::Key { key: Key::Num2, physical_key: Some(Key::Num2), pressed: true, repeat: false, modifiers: cmd },
+        Event::Key { key: Key::Num2, physical_key: Some(Key::Num2), pressed: false, repeat: false, modifiers: cmd },
         Event::ModifiersChanged(Modifiers::NONE),
     ]);
     h.run_steps(3);
