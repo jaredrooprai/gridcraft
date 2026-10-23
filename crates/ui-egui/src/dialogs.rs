@@ -1587,6 +1587,12 @@ fn paste_special_shortcuts(d: &mut Dialog, ctx: &egui::Context) {
 }
 
 fn ok_cancel(ui: &mut egui::Ui, confirm: &mut bool, open: &mut bool) {
+    ok_cancel_buttons(ui, confirm, open);
+}
+
+/// The OK and Cancel row; returns both buttons. Enter is OK, except on a focused Cancel (which
+/// Enter presses instead) or while a drop-down is open.
+fn ok_cancel_buttons(ui: &mut egui::Ui, confirm: &mut bool, open: &mut bool) -> (egui::Response, egui::Response) {
     ui.add_space(8.0);
     // A row as tall as the buttons: a right-to-left layout straight in the window takes all the
     // height it is offered, which stretched every form dialog to the screen's height.
@@ -1597,14 +1603,19 @@ fn ok_cancel(ui: &mut egui::Ui, confirm: &mut bool, open: &mut bool) {
                 egui::Button::new(egui::RichText::new(format!("   {}   ", lang.tr("OK"))).color(Color32::WHITE))
                     .fill(crate::theme::Tokens::get(ui.ctx()).accent),
             );
-            if ok.clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
+            let cancel = ui.button(format!(" {} ", lang.tr("Cancel")));
+            let enter = ui.input(|i| i.key_pressed(Key::Enter)) && !cancel.has_focus() && !egui::Popup::is_any_open(ui.ctx());
+            if ok.clicked() || enter {
                 *confirm = true;
             }
-            if ui.button(format!(" {} ", lang.tr("Cancel"))).clicked() {
+            if cancel.clicked() {
                 *open = false;
             }
+            (ok, cancel)
         })
-    });
+        .inner
+    })
+    .inner
 }
 
 fn form(ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool, open: &mut bool) {
@@ -1789,40 +1800,145 @@ fn macros(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog) {
     });
 }
 
+/// This fork: Format Cells' quick number formats, on the Number tab.
+const QUICK_FORMATS: [&str; 3] = ["0", "#,##0", "0%"];
+
+/// An entry of a one-Tab-stop list (Format Cells' tab strip and categories). Only the `stop`
+/// entry (the selected one) takes keyboard focus, so Tab passes over the rest and the arrow keys
+/// move within the list.
+fn list_item(ui: &mut egui::Ui, selected: bool, stop: bool, text: &str) -> egui::Response {
+    let sense = if stop { egui::Sense::click() } else { egui::Sense::CLICK };
+    ui.add(egui::Button::selectable(selected, text).sense(sense))
+}
+
+/// The list position an arrow key moves to from `at` (of `len`), wrapping around; `back` and
+/// `forward` are the keys for each way. Takes the key, and stops egui moving focus with it.
+fn arrow_step(ui: &egui::Ui, back: Key, forward: Key, at: usize, len: usize) -> Option<usize> {
+    let (b, f) = ui.input_mut(|i| (i.consume_key(egui::Modifiers::NONE, back), i.consume_key(egui::Modifiers::NONE, forward)));
+    if len == 0 || (!b && !f) {
+        return None;
+    }
+    ui.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
+    Some(if f { (at + 1) % len } else { (at + len - 1) % len })
+}
+
 fn format_cells(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: &mut bool) {
     // `d.tab` stays the English name (it is what `open_dialog` and tests pass); only the drawn
     // labels are translated. The Fill tab is keyed by context: the Alignment tab's "Fill" is a
     // different word in some languages.
     let lang = app.ui.language;
-    ui.horizontal(|ui| {
-        for (tab, key) in [
-            ("Number", "Number"),
-            ("Alignment", "Alignment"),
-            ("Font", "Font"),
-            ("Border", "Border"),
-            ("Fill", "Format Cells|Fill"),
-            ("Protection", "Protection"),
-        ] {
-            if ui.selectable_label(d.tab == tab, lang.tr(key)).clicked() {
-                d.tab = tab.to_string();
-            }
+    const TABS: [(&str, &str); 6] = [
+        ("Number", "Number"),
+        ("Alignment", "Alignment"),
+        ("Font", "Font"),
+        ("Border", "Border"),
+        ("Fill", "Format Cells|Fill"),
+        ("Protection", "Protection"),
+    ];
+    // This fork: the whole dialog works from the keyboard. The tab strip is one Tab stop (the
+    // current tab) and Left/Right switch tabs; the Number categories are one Tab stop and Up/Down
+    // pick a category. Tab and Shift+Tab cycle through the dialog without leaving it: egui moves
+    // focus as each widget is drawn, so Tab on the last stop and Shift+Tab on the first are taken
+    // here, before any is, using last frame's ends.
+    let ends_key = egui::Id::new("formatCells.tabEnds");
+    let wrap = ui.data(|m| m.get_temp::<(egui::Id, egui::Id)>(ends_key)).and_then(|(first, last)| {
+        let focused = ui.memory(|m| m.focused());
+        let (tab, back) = ui.input(|i| (i.key_pressed(Key::Tab) && i.modifiers.is_none(), i.key_pressed(Key::Tab) && i.modifiers.shift_only()));
+        let to = if tab && focused == Some(last) {
+            Some(first)
+        } else if back && focused == Some(first) {
+            Some(last)
+        } else {
+            None
+        };
+        if to.is_some() {
+            ui.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
+        to
     });
+    let tabs = ui
+        .horizontal(|ui| {
+            let mut tabs = Vec::new();
+            for (tab, key) in TABS {
+                let r = list_item(ui, d.tab == tab, d.tab == tab, lang.tr(key));
+                if r.clicked() {
+                    d.tab = tab.to_string();
+                }
+                tabs.push(r);
+            }
+            tabs
+        })
+        .inner;
+    let current = TABS.iter().position(|(tab, _)| *tab == d.tab).unwrap_or(0);
+    if tabs.get(current).is_some_and(|r| r.has_focus())
+        && let Some(next) = arrow_step(ui, Key::ArrowLeft, Key::ArrowRight, current, TABS.len())
+        && let (Some((tab, _)), Some(r)) = (TABS.get(next), tabs.get(next))
+    {
+        d.tab = tab.to_string();
+        r.request_focus();
+    }
+    let first_stop = tabs.get(current).cloned();
+    // Where the keyboard starts: the first quick format on the Number tab, else the tab strip.
+    let mut start = first_stop.clone();
     ui.separator();
     let mut st: gridcraft_engine::model::Style = d.values.get("style").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default();
     let sample = app.session.active().and_then(|doc| doc.wb.active().map(|s| s.value(doc.selection.active))).unwrap_or_default();
     match d.tab.as_str() {
         "Number" => {
             let mut code = st.num_fmt.as_str().to_string();
+            // This fork: the formats used most, applied (and the dialog closed) in one press.
+            let quick = ui
+                .horizontal(|ui| {
+                    let mut chosen = None;
+                    for (i, c) in QUICK_FORMATS.into_iter().enumerate() {
+                        let r =
+                            ui.add(egui::Button::new(egui::RichText::new(c).monospace().size(14.0)).selected(code == c).min_size(vec2(64.0, 26.0)));
+                        if i == 0 {
+                            start = Some(r.clone());
+                        }
+                        if r.clicked() {
+                            chosen = Some(c);
+                        }
+                    }
+                    chosen
+                })
+                .inner;
+            ui.add_space(6.0);
             ui.columns(2, |cols| {
                 cols[0].label(egui::RichText::new(lang.tr("Category:")).strong());
-                for name in
-                    ["General", "Number", "Currency", "Accounting", "Short Date", "Long Date", "Time", "Percentage", "Fraction", "Scientific", "Text"]
-                {
-                    let c = gridcraft_engine::cmd::format::format_code_for(name).to_string();
-                    if cols[0].selectable_label(code == c, lang.tr(name)).clicked() {
-                        code = c;
+                const CATEGORIES: [&str; 11] = [
+                    "General",
+                    "Number",
+                    "Currency",
+                    "Accounting",
+                    "Short Date",
+                    "Long Date",
+                    "Time",
+                    "Percentage",
+                    "Fraction",
+                    "Scientific",
+                    "Text",
+                ];
+                let codes = CATEGORIES.map(|name| gridcraft_engine::cmd::format::format_code_for(name).to_string());
+                // The selected category is the list's Tab stop (the first one when none matches).
+                let selected = codes.iter().position(|c| *c == code);
+                let stop = selected.unwrap_or(0);
+                let mut items = Vec::new();
+                for (i, name) in CATEGORIES.iter().enumerate() {
+                    let r = list_item(&mut cols[0], selected == Some(i), i == stop, lang.tr(name));
+                    if r.clicked()
+                        && let Some(c) = codes.get(i)
+                    {
+                        code = c.clone();
                     }
+                    items.push(r);
+                }
+                if items.get(stop).is_some_and(|r| r.has_focus())
+                    && let Some(next) = arrow_step(&cols[0], Key::ArrowUp, Key::ArrowDown, stop, CATEGORIES.len())
+                    && let (Some(c), Some(r)) = (codes.get(next), items.get(next))
+                {
+                    code = c.clone();
+                    r.request_focus();
                 }
                 cols[1].label(egui::RichText::new(lang.tr("Sample")).strong());
                 let preview = app.session.active().map(|doc| gridcraft_engine::display::format(&sample, &code, &doc.wb).text).unwrap_or_default();
@@ -1830,13 +1946,11 @@ fn format_cells(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: 
                 cols[1].add_space(8.0);
                 cols[1].label(lang.tr("Type (custom format code):"));
                 cols[1].text_edit_singleline(&mut code);
+                // 0, #,##0 and 0% are the quick formats above.
                 for c in [
-                    "0",
                     "0.00",
-                    "#,##0",
                     "#,##0.00",
                     "#,##0;[Red]-#,##0",
-                    "0%",
                     "0.00%",
                     "0.00E+00",
                     "# ?/?",
@@ -1853,6 +1967,10 @@ fn format_cells(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: 
                     }
                 }
             });
+            if let Some(c) = quick {
+                code = c.to_string();
+                *confirm = true;
+            }
             st.num_fmt = gridcraft_engine::model::NumFmt::new(&code);
         }
         "Alignment" => {
@@ -2003,7 +2121,29 @@ fn format_cells(app: &mut SheetApp, ui: &mut egui::Ui, d: &mut Dialog, confirm: 
         d.values.insert("style".into(), v);
     }
     let mut open = true;
-    ok_cancel(ui, confirm, &mut open);
+    let (_, cancel) = ok_cancel_buttons(ui, confirm, &mut open);
+    // Tab from Cancel wraps to the tab strip, Shift+Tab from the tab strip to Cancel.
+    if let Some(first) = &first_stop {
+        if let Some(to) = wrap {
+            ui.memory_mut(|m| m.request_focus(to));
+        }
+        ui.data_mut(|m| m.insert_temp(ends_key, (first.id, cancel.id)));
+    }
+    // A ring round the control with keyboard focus, so it can be followed on every kind of control.
+    let window = ui.min_rect().expand(8.0);
+    if let Some(r) = ui.memory(|m| m.focused()).and_then(|id| ui.ctx().read_response(id)).filter(|r| window.contains_rect(r.rect)) {
+        let accent = crate::theme::Tokens::get(ui.ctx()).accent;
+        ui.painter().rect_stroke(r.rect.expand(2.0), 3.0, egui::Stroke::new(1.5, accent), egui::StrokeKind::Outside);
+    }
+    if !d.focus_initialized
+        && let Some(r) = &start
+    {
+        if r.has_focus() {
+            d.focus_initialized = true;
+        } else {
+            r.request_focus();
+        }
+    }
     if *confirm && let Some(style) = d.values.get("style").cloned() {
         app.run_or_alert("home.formatCells", json!({"style": style}));
     }

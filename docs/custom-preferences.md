@@ -218,6 +218,35 @@ Where it lived: `Num2 if cmd && !s && mac` in `lookup()` in `crates/ui-egui/src/
 
 Test: `command_2_opens_zoom_ready_to_type`.
 
+## 15. Format Cells works from the keyboard, with quick 0, #,##0 and 0%
+
+This deliberately differs from Excel.
+
+- **Quick formats.** The Number tab starts with three buttons, `0`, `#,##0` and `0%`. Pressing one
+  (click, Space or Enter) applies that format to the selection and closes the dialog. They were
+  dropped from the list of format-code buttons below them, so each appears once.
+- **The keyboard starts on the first quick format** when the dialog opens on the Number tab
+  (otherwise on the current tab). Cmd+1, Right, Enter applies `#,##0`.
+- **Tab and Shift+Tab** move through every control and wrap around inside the dialog; focus
+  never escapes to the ribbon or grid.
+- **The tab strip is one Tab stop** (the current tab). Left/Right switch tabs, wrapping.
+- **The Number categories are one Tab stop** (the selected category, or General when none
+  matches). Up/Down pick a category, wrapping, and the Sample follows.
+- **Elsewhere the arrow keys move focus** to the nearest control (egui's own behaviour). Sliders
+  take Left/Right to change their value, text fields take them to move the caret; Tab leaves both.
+- **Space or Enter presses the focused control.** Enter is also OK, except on a focused Cancel,
+  where it cancels, or while a drop-down is open. The Cancel rule is in `ok_cancel_buttons`, which
+  every dialog's OK/Cancel row uses.
+- **A green ring** (`Tokens::accent`) marks the focused control.
+
+Where it lived: `format_cells`, `list_item`, `arrow_step`, `QUICK_FORMATS` and
+`ok_cancel_buttons` in `crates/ui-egui/src/dialogs.rs`. Unselected list entries use
+`Sense::CLICK` without `FOCUSABLE`, so Tab passes over them. The Tab wrap is decided at the start
+of the frame from last frame's first and last stops (egui temp data `formatCells.tabEnds`), because
+egui moves focus as each widget is drawn.
+
+Tests: `crates/ui-egui/tests/it/format_cells_keyboard.rs`.
+
 ## Merging upstream
 
 Last merged: upstream main after 0.11.1 (`530a8cc8`), on 2026-10-23. Things to watch when merging:
