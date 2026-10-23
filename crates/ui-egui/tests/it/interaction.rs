@@ -1071,6 +1071,27 @@ fn command_2_opens_zoom_ready_to_type() {
 }
 
 #[test]
+fn control_7_edits_the_cell_keeping_its_contents() {
+    let mut s = blank();
+    s.execute("cell.set", json!({"cell": "B2", "input": "abc"})).unwrap();
+    s.execute("selection.set", json!({"cell": "B2"})).unwrap();
+    let mut h = harness(s);
+    h.ctx.set_os(egui::os::OperatingSystem::Mac);
+    h.input_mut().events.push(Event::ModifiersChanged(Modifiers::CTRL));
+    h.input_mut().events.extend([
+        Event::Key { key: Key::Num7, physical_key: Some(Key::Num7), pressed: true, repeat: false, modifiers: Modifiers::CTRL },
+        Event::Key { key: Key::Num7, physical_key: Some(Key::Num7), pressed: false, repeat: false, modifiers: Modifiers::CTRL },
+        Event::ModifiersChanged(Modifiers::NONE),
+    ]);
+    h.run_steps(3);
+    let ed = h.state().editor.as_ref().expect("Control+7 opened the cell for editing");
+    assert_eq!(ed.text, "abc", "the contents are kept, as with F2");
+    text(&mut h, "d");
+    key(&mut h, Key::Enter, Modifiers::NONE);
+    assert_eq!(value(&h, "B2"), Value::text("abcd"));
+}
+
+#[test]
 fn option_left_and_right_add_and_remove_a_decimal() {
     let mut s = blank();
     s.execute("cell.set", json!({"cell": "B2", "input": "1234.5678"})).unwrap();

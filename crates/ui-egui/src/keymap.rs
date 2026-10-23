@@ -110,6 +110,8 @@ pub fn lookup(key: Key, physical: Option<Key>, m: Modifiers, mac: bool) -> Optio
         L if cmd && mac => run("home.alignLeft"),
         L if ctrl && mac => Shortcut::Dialog("defineName", json!({})),
         U if ctrl && mac && !s => Shortcut::Edit,
+        // This fork: Control+7 edits too (the number row's 7 or the keypad's).
+        Num7 if ctrl && mac && !s && !m.command => Shortcut::Edit,
         L if cmd => run("insert.table"),
         E if cmd && mac && !s => run("home.alignCenter"),
         E if ctrl && mac && !s => run("edit.flashFill"),

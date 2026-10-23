@@ -261,6 +261,19 @@ Where it lived: the `ArrowLeft` / `ArrowRight` `alt && !s && mac` arms of `looku
 Tests: `option_left_and_right_add_and_remove_a_decimal` (`tests/it/interaction.rs`) and the
 `lookup` assertions in `windows_and_mac_variants` (`tests/it/keyboard_shortcuts.rs`).
 
+## 17. Control+7 edits the active cell
+
+This isn't an Excel shortcut. On macOS, with the grid focused, Control+7 opens the active cell
+for editing with its contents kept and the caret at the end, like F2 or Excel for Mac's
+Control+U. Both the number row's 7 and the keypad's 7 work (the keymap matches the physical key,
+and egui reports keypad 7 as `Num7`). Control+Shift+7 is still the outline border.
+
+Where it lived: `Num7 if ctrl && mac && !s && !m.command` in `lookup()` in
+`crates/ui-egui/src/keymap.rs`.
+
+Tests: `control_7_edits_the_cell_keeping_its_contents` (`tests/it/interaction.rs`) and the
+`lookup` assertions in `windows_and_mac_variants` (`tests/it/keyboard_shortcuts.rs`).
+
 ## Merging upstream
 
 Last merged: upstream main after 0.11.1 (`530a8cc8`), on 2026-10-23. Things to watch when merging:
