@@ -1,6 +1,6 @@
 # Custom preferences (jaredrooprai/gridcraft)
 
-_Last updated: 2026-10-14._
+_Last updated: 2026-10-23._
 
 This fork of GridCraft (`main` on `jaredrooprai/gridcraft`; upstream is `storytold/gridcraft`)
 carries behaviour changes that its owner wants kept. Some deliberately differ from Excel. This
@@ -148,7 +148,11 @@ the edge of the data, like Cmd+arrow in the grid. From a cell below `A1:A5`, it 
 then `A1`. A new reference, after another operator, jumps from the edited cell.
 
 Where it lived: `point_move` in `crates/ui-egui/src/grid.rs` and the arrow handling in
-`crates/ui-egui/src/formula_bar.rs`.
+`crates/ui-egui/src/formula_bar.rs`. `EditState::point_origin` (editor.rs) picks the start: the
+last pointed cell only while the caret is at the end of that reference (upstream's
+`point_at_caret`), else the edited cell. Upstream's Shift+arrow `point_anchor` is ignored for a
+new reference for the same reason. Upstream's `pointing_along_a_frozen_row_keeps_the_edited_cell_in_view`
+sets `point_cell` without a pointed reference; the fork's copy also sets `point`.
 
 Test: `cmd_arrows_in_point_mode_jump_to_the_data_edge`.
 
@@ -159,7 +163,15 @@ Commit: `e2dbbaf`.
 This deliberately differs from Excel. While editing in a cell, the editor doesn't grow to fit
 long or multi-line text; the text scrolls inside the cell's own rectangle.
 
-Where it lived: `in_cell_editor` in `crates/ui-egui/src/grid.rs`.
+Where it lived: `in_cell_editor` in `crates/ui-egui/src/grid.rs`. The editor field is single-line
+(`editor_widget(.., false, ..)`) even in a Wrap Text cell, so it scrolls sideways to keep the caret
+inside the cell.
+
+Upstream later made the editor widen to one long line and, with Wrap Text, wrap and grow down. Its
+tests for that are rewritten in the fork: `one_long_line_keeps_the_editor_at_the_cells_size`
+(`tests/it/in_cell_editor_size.rs`) and `a_long_edit_stays_in_the_cells_own_rectangle`
+(`tests/it/in_cell_editor_wrap.rs`, where `the_editor_measures_the_text_at_the_fields_wrap_width`
+was dropped).
 
 Commit: `353cd91`.
 
@@ -196,11 +208,11 @@ Clicking the zoom percentage in the status bar does three things:
 - the Zoom dialog opens with the caret in the Custom (%) box
 - the current value is selected, so typing a number and pressing Enter sets the zoom
 
-Mechanism: `Dialog::with_focus`. Focus is requested just before the box is drawn, not during the
-window's first, invisible sizing pass, where egui drops it. It is requested again each frame until
-the box has it: from the second opening on, the window's size is remembered, so there is no sizing
-pass, and the first request was lost (most likely to the click that opened the dialog). The test opens Zoom three
-times.
+Mechanism: upstream 0.11 redrew Zoom as its own `zoom()` body in `crates/ui-egui/src/dialogs.rs`
+and added `take_first_focus`, which asks for focus every frame until the field has it and then
+selects its value. The fork calls it on the Custom box's `DragValue`, with
+`update_while_editing(true)` so Enter in the same frame confirms the typed number. (Before 0.11 the
+fork had its own `Dialog::with_focus` doing the same.) The test opens Zoom three times.
 
 Test: `clicking_the_zoom_percentage_puts_the_cursor_in_the_custom_box`.
 
@@ -241,13 +253,13 @@ had no shortcut; the user moved it back. Cmd+S is Save, as in Excel.)
 - **The next cell clicked, dragged across or moved to with an arrow key takes the format.** The
   painter then ends. Shift+arrow (extending the selection) doesn't paint. Double-clicking the brush
   still keeps it on for several targets.
-- **Applying on click was missing upstream.** At the time of writing, upstream's grid never applied
-  a picked-up format on click; `apply_format_painter` in `crates/ui-egui/src/grid.rs` added it,
-  called on mouse release after a selection and after a plain arrow move.
+- **Applying on click is upstream's now** (`format_painter_apply` in `crates/ui-egui/src/grid.rs`,
+  since 0.11, on mouse release over cells or headers). The fork only adds the arrow-key part: the
+  grid's `mv` closure calls `format_painter_apply` after a move without Shift.
 
 Where it lived:
 - `Shortcut::FormatPainter` in `crates/ui-egui/src/keymap.rs` (the key and the toggle)
-- `apply_format_painter` in `crates/ui-egui/src/grid.rs`
+- `format_painter_apply` (called from the arrow-key `mv` closure) in `crates/ui-egui/src/grid.rs`
 - the `edit.formatPainter` shortcut metadata (`Ctrl+Shift+C`) in `crates/engine/src/cmd/edit.rs`
 - the brush tooltip in `crates/ui-egui/src/ribbon.rs`
 
@@ -268,11 +280,17 @@ Test: `frozen_panes_keep_their_gridlines_when_scrolled`.
 
 ## Merging upstream
 
-Last merged: upstream 0.8.0, on 2026-10-19. Things to watch when merging:
+Last merged: upstream main after 0.11.1 (`530a8cc8`), on 2026-10-23. Things to watch when merging:
 
 - **Conflicts so far:** the keyboard shortcuts in `ribbon.rs` (section 2), `KeypadKey` next to new
-  structs in `crates/ui-egui/src/lib.rs`, and tests appended to the end of
-  `crates/ui-egui/tests/interaction.rs` (keep both sides).
+  structs in `crates/ui-egui/src/lib.rs`, tests appended to the end of
+  `crates/ui-egui/tests/it/interaction.rs` (keep both sides; it was `tests/interaction.rs` before
+  0.11), and in 0.11: the in-cell editor's size (section 5), `point_move` and `point_origin`
+  (section 4), the Zoom dialog (section 8), the Format Painter on release (section 12) and the
+  Format Painter tooltip in `ribbon.rs`.
+- **Tooltips:** since 0.11 ribbon tooltips get their shortcut from `TOOLTIP_SHORTCUTS` in
+  `widgets.rs`, so "Save (⌘S)"-style keys are gone from the i18n catalogs. `ja.rs` counts
+  `pt.rs`'s keys: a stray key there fails `covers_every_key_the_portuguese_catalog_translates`.
 - **Clippy on macOS:** upstream's CI runs clippy on Linux. In 0.8.0 `desktop_theme.rs` bound a
   `()` value off Linux; the fork allows `clippy::let_unit_value` on that one line for non-Linux
   builds.
