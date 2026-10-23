@@ -1050,6 +1050,28 @@ fn clicking_the_zoom_percentage_puts_the_cursor_in_the_custom_box() {
 }
 
 #[test]
+fn option_2_opens_zoom_ready_to_type() {
+    let mut h = harness(blank());
+    h.ctx.set_os(egui::os::OperatingSystem::Mac);
+    // As macOS sends it: the key, and the character Option+2 types, which must not start an edit.
+    h.input_mut().events.extend([
+        Event::ModifiersChanged(Modifiers::ALT),
+        Event::Key { key: Key::Num2, physical_key: Some(Key::Num2), pressed: true, repeat: false, modifiers: Modifiers::ALT },
+        Event::Text("™".into()),
+        Event::Key { key: Key::Num2, physical_key: Some(Key::Num2), pressed: false, repeat: false, modifiers: Modifiers::ALT },
+        Event::ModifiersChanged(Modifiers::NONE),
+    ]);
+    h.run_steps(3);
+    assert_eq!(h.state().dialog.as_ref().map(|d| d.name().to_string()).as_deref(), Some("zoom"));
+    assert!(h.state().editor.is_none());
+    assert_eq!(value(&h, "A1"), Value::Empty);
+    text(&mut h, "150");
+    key(&mut h, Key::Enter, Modifiers::NONE);
+    h.run_steps(3);
+    assert_eq!(h.state().session.active().and_then(|d| d.wb.active().map(|s| s.zoom)), Some(150));
+}
+
+#[test]
 fn control_r_fills_the_first_cells_formula_across_the_selection() {
     let mut s = blank();
     s.execute("range.setValues", json!({"range": "A1:D1", "values": [[1, 2, 3, 4]]})).unwrap();

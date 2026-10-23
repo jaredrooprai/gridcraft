@@ -206,6 +206,19 @@ Where it lived: `gridlines()` (used by `paint_quadrant`) in `crates/ui-egui/src/
 
 Test: `frozen_panes_keep_their_gridlines_when_scrolled`.
 
+## 14. Option+2 opens Zoom
+
+This isn't an Excel shortcut. On macOS, Option+2 opens the Zoom dialog the same way clicking the
+zoom percentage does (section 8): the caret is in the Custom (%) box with its value selected, so
+typing a number and pressing Enter sets the zoom. The `™` that Option+2 types on a US layout is
+swallowed, not typed into the cell. It's macOS only, because on Windows Alt+digit belongs to the
+ribbon's keytips.
+
+Where it lived: `Num2 if alt && !s && mac` in `lookup()` in `crates/ui-egui/src/keymap.rs`
+(matched by the physical key, so other layouts work too).
+
+Test: `option_2_opens_zoom_ready_to_type`.
+
 ## Merging upstream
 
 Last merged: upstream main after 0.11.1 (`530a8cc8`), on 2026-10-23. Things to watch when merging:
