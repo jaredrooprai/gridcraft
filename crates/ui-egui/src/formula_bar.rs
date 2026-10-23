@@ -297,7 +297,8 @@ pub fn editor_widget(app: &mut SheetApp, ui: &mut egui::Ui, id: egui::Id, font: 
     // The text widget.
     let refs = formula_refs(&ed.text);
     let text_color = Tokens::get(ui.ctx()).text;
-    let cell_text_color = if id == egui::Id::new("gridcraft.cell_editor") { Color32::BLACK } else { text_color };
+    let cell_text_color =
+        if id == egui::Id::new("gridcraft.cell_editor") { ui.visuals().override_text_color.unwrap_or(Color32::BLACK) } else { text_color };
     let font2 = font.clone();
     let mut layouter = move |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap_width: f32| {
         let s = buf.as_str();

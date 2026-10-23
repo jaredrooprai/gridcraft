@@ -274,6 +274,31 @@ Where it lived: `Num7 if ctrl && mac && !s && !m.command` in `lookup()` in
 Tests: `control_7_edits_the_cell_keeping_its_contents` (`tests/it/interaction.rs`) and the
 `lookup` assertions in `windows_and_mac_variants` (`tests/it/keyboard_shortcuts.rs`).
 
+## 18. Dark mode darkens the sheet itself
+
+Upstream's dark theme only darkens the chrome: the cells stay white paper, like Excel's default.
+In this fork, dark mode darkens the cells too:
+- The cell area is `0x1F1F1F` and the gridlines are `0x3A3A3A`. Merged areas and the in-cell
+  editor use the same background.
+- Selection has a brighter green.
+- Text and border colours are adjusted by `sheet_ink()`:
+  - Automatic ink and other near-black greys on an unfilled cell use the light cell text colour
+    `0xE6E6E6`.
+  - Other colours too dark to read are lightened, keeping their hue.
+  - A cell with its own fill keeps its colours.
+- The in-cell editor picks black or white ink for its text, the same way it already did for the
+  caret.
+- Charts, Print Preview and printing stay white.
+
+Where it lived:
+- `Tokens::dark()` (`grid_bg`, `gridline`, `cell_text`, `sel_fill`, `sel_border`) in
+  `crates/ui-egui/src/theme.rs`.
+- `sheet_ink()`, its uses in `paint_quadrant`, and the in-cell editor's fill and
+  `override_text_color` in `crates/ui-egui/src/grid.rs`.
+- The `cell_text_color` line in `editor_widget` in `crates/ui-egui/src/formula_bar.rs`.
+
+Test: `grid::tests::dark_sheet_lightens_ink_that_would_vanish`.
+
 ## Merging upstream
 
 Last merged: upstream main after 0.11.1 (`530a8cc8`), on 2026-10-23. Things to watch when merging:

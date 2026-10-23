@@ -455,6 +455,22 @@ fn col32(c: Color, wb: &Workbook, default: Color32) -> Color32 {
     c.resolve(&wb.theme).map(theme::color32).unwrap_or(default)
 }
 
+/// This fork: on the dark sheet, ink too dark to read on an unfilled cell turns light: Automatic
+/// and other near-black greys become the sheet's text colour, dark colours are lightened keeping
+/// their hue. Filled cells keep their colours.
+fn sheet_ink(ink: Color32, fill: Option<Color32>, t: &Tokens) -> Color32 {
+    let (r, g, b) = (ink.r(), ink.g(), ink.b());
+    let l = 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
+    if !t.dark || fill.is_some() || l >= 90.0 {
+        return ink;
+    }
+    if r.max(g).max(b) - r.min(g).min(b) < 40 {
+        return t.cell_text;
+    }
+    let up = |c: u8| (c as f32 + (255.0 - c as f32) * 0.55).round() as u8;
+    Color32::from_rgb(up(r), up(g), up(b))
+}
+
 fn numfmt_color(c: gridcraft_engine::numfmt::FormatColor) -> Color32 {
     c.rgb().map(|[r, g, b]| Color32::from_rgb(r, g, b)).unwrap_or(Color32::BLACK)
 }
@@ -1166,7 +1182,7 @@ pub(crate) fn paint_quadrant(
         if let Some(f) = lk.fill {
             p.rect_filled(rect.expand(0.0), 0.0, f);
         } else if in_merge(c).is_some() {
-            p.rect_filled(rect.shrink(0.5), 0.0, Color32::WHITE);
+            p.rect_filled(rect.shrink(0.5), 0.0, t.grid_bg);
         }
         looks.push((anchor, rect, lk, cfl));
     }
@@ -1264,7 +1280,7 @@ pub(crate) fn paint_quadrant(
         if text.is_empty() {
             continue;
         }
-        let color = ncolor.unwrap_or(lk.text_color);
+        let color = sheet_ink(ncolor.unwrap_or(lk.text_color), lk.fill, t);
         let halign = match st.align.h {
             HAlign::General => match v {
                 Value::Number(_) => HAlign::Right,
@@ -1440,14 +1456,24 @@ pub(crate) fn paint_quadrant(
             if line.is_none() {
                 continue;
             }
-            let col = col32(line.color, wb, Color32::BLACK);
+            let col = sheet_ink(col32(line.color, wb, Color32::BLACK), lk.fill, t);
             paint_border(p, pts, line.style, col);
         }
         if !b.diag_down.is_none() {
-            paint_border(p, [rect.left_top(), rect.right_bottom()], b.diag_down.style, col32(b.diag_down.color, wb, Color32::BLACK));
+            paint_border(
+                p,
+                [rect.left_top(), rect.right_bottom()],
+                b.diag_down.style,
+                sheet_ink(col32(b.diag_down.color, wb, Color32::BLACK), lk.fill, t),
+            );
         }
         if !b.diag_up.is_none() {
-            paint_border(p, [rect.left_bottom(), rect.right_top()], b.diag_up.style, col32(b.diag_up.color, wb, Color32::BLACK));
+            paint_border(
+                p,
+                [rect.left_bottom(), rect.right_top()],
+                b.diag_up.style,
+                sheet_ink(col32(b.diag_up.color, wb, Color32::BLACK), lk.fill, t),
+            );
         }
         // Comment / note indicator.
         if let Some(cm) = sh.comments.get(c) {
@@ -3116,9 +3142,10 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let font = FontId::new(size, theme::cell_family(&st.font.name, st.font.bold, st.font.italic));
     // The editor keeps the cell's size; long text scrolls inside it.
     let erect = geo.mirror_rect(rect);
+    let t = Tokens::get(ui.ctx());
     let fill = match st.fill.pattern {
-        PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(Color32::WHITE),
-        _ => Color32::WHITE,
+        PatternType::Solid => st.fill.fg.resolve(&wb.theme).map(theme::color32).unwrap_or(t.grid_bg),
+        _ => t.grid_bg,
     };
     let split = pos2(geo.cells.left() + geo.frozen_w, geo.cells.top() + geo.frozen_h);
     let quadrant = Rect::from_min_max(
@@ -3128,7 +3155,6 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     let clip = ui.clip_rect().intersect(quadrant);
     let painter = ui.painter().with_clip_rect(clip);
     painter.rect_filled(erect, 0.0, fill);
-    let t = Tokens::get(ui.ctx());
     painter.rect_stroke(erect.expand(1.0), 0.0, Stroke::new(2.0, t.sel_border), StrokeKind::Middle);
     let id = egui::Id::new("gridcraft.cell_editor");
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(erect.shrink2(vec2(2.0, 1.0))));
@@ -3136,6 +3162,8 @@ fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, 
     // The theme's caret is meant for the UI chrome and vanishes on some fills (and, in the dark
     // theme, on the white paper): pick black or white against the fill, like Excel.
     child.visuals_mut().text_cursor.stroke.color = ink_on(fill);
+    // The typed text uses the same ink (the editor reads it back).
+    child.visuals_mut().override_text_color = Some(ink_on(fill));
     // One line, even with Wrap Text: it scrolls sideways to keep the caret in the cell.
     crate::formula_bar::editor_widget(app, &mut child, id, font, false, erect.width() - 4.0);
 }
@@ -4144,6 +4172,20 @@ mod tests {
         assert_eq!(text(0, &mut cf), "1");
         assert_eq!(text(1, &mut cf), "3.00");
         assert_eq!(text(2, &mut cf), "4.00");
+    }
+
+    #[test]
+    fn dark_sheet_lightens_ink_that_would_vanish() {
+        let (light, dark) = (Tokens::light(), Tokens::dark());
+        assert_ne!(dark.grid_bg, Color32::WHITE, "the dark theme darkens the sheet itself");
+        assert_eq!(sheet_ink(Color32::BLACK, None, &light), Color32::BLACK);
+        assert_eq!(sheet_ink(Color32::BLACK, None, &dark), dark.cell_text);
+        // A filled cell keeps its own ink.
+        assert_eq!(sheet_ink(Color32::BLACK, Some(Color32::YELLOW), &dark), Color32::BLACK);
+        // A dark colour lightens but stays the same hue; bright colours stay as they are.
+        let navy = sheet_ink(Color32::from_rgb(0x0E, 0x28, 0x41), None, &dark);
+        assert!(navy.b() > navy.r() && navy.r() > 0x80, "{navy:?}");
+        assert_eq!(sheet_ink(Color32::from_rgb(0xE9, 0x71, 0x32), None, &dark), Color32::from_rgb(0xE9, 0x71, 0x32));
     }
 
     #[test]
