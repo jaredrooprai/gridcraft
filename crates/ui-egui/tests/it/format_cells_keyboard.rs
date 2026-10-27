@@ -112,7 +112,7 @@ fn up_and_down_pick_a_category_and_enter_applies_it() {
 #[test]
 fn tab_cycles_through_the_dialog_without_leaving_it() {
     let mut h = harness();
-    let dialog = h.ctx.memory(|m| m.area_rect(egui::Id::new("dialog").with("formatCells"))).expect("the dialog is shown");
+    let dialog = h.ctx.memory(|m| m.area_rect(egui::Id::unique("dialog").with("formatCells"))).expect("the dialog is shown");
     let mut seen = std::collections::HashSet::new();
     for i in 0..60 {
         press(&mut h, Key::Tab, Modifiers::NONE);

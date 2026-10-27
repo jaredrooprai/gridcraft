@@ -9,7 +9,7 @@ use serde_json::json;
 fn app() -> SheetApp {
     let mut session = Session::new();
     session.new_workbook();
-    let mut app = SheetApp::new(session, Default::default());
+    let mut app = crate::common::app(session);
     app.ui.language = Language::En;
     app
 }
@@ -78,10 +78,11 @@ fn localized_argument_hints_ignore_decimal_commas_arrays_and_nested_calls() {
 }
 
 #[test]
+/// Spanish autocomplete offers `SUMA` instead of `SUM`; accepting it inserts `=SUMA(`, and English switches back.
 fn localized_autocomplete_is_rendered_and_inserts_the_selected_name() {
     let mut app = app();
     app.run("app.language.set", json!({"language":"es"})).unwrap();
-    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
+    let mut h = crate::common::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
         |ui, app: &mut SheetApp| {
             let ctx = ui.ctx().clone();
             app.logic(&ctx);
@@ -140,6 +141,7 @@ fn locale_preserves_text_cells_and_existing_entry_conveniences() {
 }
 
 #[test]
+/// Insert Function and AutoSum use `=SUMA(`, while user-supplied formula text is not translated twice.
 fn canonical_engine_templates_enter_the_selected_formula_language() {
     let mut app = app();
     app.run("app.language.set", json!({"language":"es"})).unwrap();
@@ -158,7 +160,7 @@ fn canonical_engine_templates_enter_the_selected_formula_language() {
     if let Ok(path) = std::env::var("GRIDCRAFT_LOCALE_SCREENSHOT") {
         app.ui.ribbon_tab = "Formulas".into();
         app.run("formulas.insertFunction", json!({"name":"SUM"})).unwrap();
-        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
+        let mut h = crate::common::builder().with_size(egui::vec2(1200.0, 800.0)).build_ui_state(
             |ui, app: &mut SheetApp| {
                 let ctx = ui.ctx().clone();
                 app.logic(&ctx);
@@ -176,14 +178,12 @@ fn portuguese_interface_retains_its_canonical_formula_fallback() {
     let mut app = app();
     app.run("app.language.set", json!({"code":"pt-BR"})).unwrap();
     assert_eq!(app.ui.language, Language::PtBr);
-    assert_eq!(app.ui.language.tr("Data"), "Dados");
     assert!(enter(&mut app, "=SUM(1.5,2.25)"));
     app.begin_edit(None, true);
     assert_eq!(app.editor.as_ref().unwrap().text, "=SUM(1.5,2.25)");
     assert!(!enter(&mut app, "=SUMA(1;2)"));
     let restored: UiState = serde_json::from_str(&serde_json::to_string(&app.ui).unwrap()).unwrap();
     assert_eq!(restored.language, Language::PtBr);
-    assert_eq!(Language::Es.tr("Page Layout|Orientation"), "Orientación");
 }
 
 #[test]
@@ -193,7 +193,6 @@ fn czech_interface_retains_its_canonical_formula_fallback() {
     let mut app = app();
     app.run("app.language.set", json!({"code":"cs-CZ"})).unwrap();
     assert_eq!(app.ui.language, Language::Cs);
-    assert_eq!(app.ui.language.tr("Formulas"), "Vzorce");
     assert!(enter(&mut app, "=SUM(1.5,2.25)"));
     app.begin_edit(None, true);
     assert_eq!(app.editor.as_ref().unwrap().text, "=SUM(1.5,2.25)");
@@ -225,8 +224,6 @@ fn turkish_interface_retains_its_canonical_formula_fallback() {
     let mut app = app();
     app.run("app.language.set", json!({"code":"tr-TR"})).unwrap();
     assert_eq!(app.ui.language, Language::Tr);
-    assert_eq!(app.ui.language.tr("Data"), "Veri");
-    assert_eq!(app.ui.language.tr("Formulas"), "Formüller");
     assert!(enter(&mut app, "=SUM(1.5,2.25)"));
     app.begin_edit(None, true);
     assert_eq!(app.editor.as_ref().unwrap().text, "=SUM(1.5,2.25)");

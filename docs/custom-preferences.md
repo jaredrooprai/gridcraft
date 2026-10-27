@@ -1,6 +1,6 @@
 # Custom preferences (jaredrooprai/gridcraft)
 
-_Last updated: 2026-10-23._
+_Last updated: 2026-10-26._
 
 This fork of GridCraft (`main` on `jaredrooprai/gridcraft`; upstream is `storytold/gridcraft`)
 carries behaviour changes that its owner wants kept. Some deliberately differ from Excel. This
@@ -41,7 +41,7 @@ instead (Control + keypad 8/4/6/2 → arrow keys, `~/.config/karabiner/`), outsi
 - Since section 1's keypad wrapper was removed, Cmd + keypad +/− reaches the app as egui reports
   it. A PC-style keypad that sends a fake Command release before its keys may not trigger it.
 
-Where it lived: `crates/ui-egui/src/ribbon.rs`, in `shortcut()` and `insert_lines()`.
+Where it lived: `crates/ui-egui/src/ribbon/shortcuts.rs`, in `shortcut()` and `insert_lines()`.
 
 Upstream 0.8.0 added Excel's version of this (Ctrl+Shift+= and Ctrl+− on whole rows or columns,
 with `whole_lines()` covering several areas and `single_area()` sending a multi-area insert to the
@@ -62,7 +62,7 @@ This matches Excel.
 - **Pointing works after a leading sign.** With `+`, `-`, `+20+` or `-5-` typed, an arrow or
   click inserts a reference.
 
-Where it lived: `input_to_cell` in `crates/engine/src/cmd/edit.rs`; `EditState::is_formula` and
+Where it lived: `input_to_cell` in `crates/engine/src/cmd/edit/cell.rs`; `EditState::is_formula` and
 `can_point` in `crates/ui-egui/src/editor.rs`.
 
 Tests: `a_leading_sign_starts_a_formula` and `a_leading_sign_points_like_equals`.
@@ -75,7 +75,7 @@ While pointing in a formula, Cmd+arrow (Ctrl+arrow on Windows and Linux) moves t
 the edge of the data, like Cmd+arrow in the grid. From a cell below `A1:A5`, it goes to `A5`,
 then `A1`. A new reference, after another operator, jumps from the edited cell.
 
-Where it lived: `point_move` in `crates/ui-egui/src/grid.rs` and the arrow handling in
+Where it lived: `point_move` in `crates/ui-egui/src/grid/interact.rs` and the arrow handling in
 `crates/ui-egui/src/formula_bar.rs`. `EditState::point_origin` (editor.rs) picks the start: the
 last pointed cell only while the caret is at the end of that reference (upstream's
 `point_at_caret`), else the edited cell. Upstream's Shift+arrow `point_anchor` is ignored for a
@@ -91,7 +91,7 @@ Commit: `e2dbbaf`.
 This deliberately differs from Excel. While editing in a cell, the editor doesn't grow to fit
 long or multi-line text; the text scrolls inside the cell's own rectangle.
 
-Where it lived: `in_cell_editor` in `crates/ui-egui/src/grid.rs`. The editor field is single-line
+Where it lived: `in_cell_editor` in `crates/ui-egui/src/grid/editor.rs`. The editor field is single-line
 (`editor_widget(.., false, ..)`) even in a Wrap Text cell, so it scrolls sideways to keep the caret
 inside the cell.
 
@@ -109,7 +109,7 @@ This deliberately differs from Excel. Numbers in new workbooks show without deci
 thousands separators. The `defaultNumberFormat` preference controls it, and `"General"` restores
 Excel's default. Automatic date, percent and currency formats still apply when typed.
 
-Where it lived: `crates/engine/src/cmd/edit.rs` and `crates/engine/src/lib.rs`, with the
+Where it lived: `unformatted()` in `crates/engine/src/cmd/edit/cell.rs` (also used by `clipboard.rs`) and `crates/engine/src/lib.rs`, with the
 preference also threaded through `fill.rs` and `cmd/print.rs`.
 
 Commit: `055fd75`.
@@ -136,7 +136,7 @@ Clicking the zoom percentage in the status bar does three things:
 - the Zoom dialog opens with the caret in the Custom (%) box
 - the current value is selected, so typing a number and pressing Enter sets the zoom
 
-Mechanism: upstream 0.11 redrew Zoom as its own `zoom()` body in `crates/ui-egui/src/dialogs.rs`
+Mechanism: upstream 0.11 redrew Zoom as its own `zoom()` body, in `crates/ui-egui/src/dialogs/zoom.rs` since 0.12
 and added `take_first_focus`, which asks for focus every frame until the field has it and then
 selects its value. The fork calls it on the Custom box's `DragValue`, with
 `update_while_editing(true)` so Enter in the same frame confirms the typed number. (Before 0.11 the
@@ -166,7 +166,7 @@ editing it. Here Delete clears the selection's contents and the cell is not open
 Fn+Delete (forward delete) also only clears.
 
 Where it lived: the `Key::Backspace` arm of the grid's keyboard handler in
-`crates/ui-egui/src/grid.rs`.
+`crates/ui-egui/src/grid/keyboard.rs`.
 
 Test: `delete_clears_the_cell_without_editing_it`.
 
@@ -181,15 +181,15 @@ had no shortcut; the user moved it back. Cmd+S is Save, as in Excel.)
 - **The next cell clicked, dragged across or moved to with an arrow key takes the format.** The
   painter then ends. Shift+arrow (extending the selection) doesn't paint. Double-clicking the brush
   still keeps it on for several targets.
-- **Applying on click is upstream's now** (`format_painter_apply` in `crates/ui-egui/src/grid.rs`,
+- **Applying on click is upstream's now** (`format_painter_apply` in `crates/ui-egui/src/grid/interact.rs`,
   since 0.11, on mouse release over cells or headers). The fork only adds the arrow-key part: the
   grid's `mv` closure calls `format_painter_apply` after a move without Shift.
 
 Where it lived:
 - `Shortcut::FormatPainter` in `crates/ui-egui/src/keymap.rs` (the key and the toggle)
-- `format_painter_apply` (called from the arrow-key `mv` closure) in `crates/ui-egui/src/grid.rs`
+- `format_painter_apply` (called from the arrow-key `mv` closure) in `crates/ui-egui/src/grid/keyboard.rs`
 - the `edit.formatPainter` shortcut metadata (`Ctrl+Shift+C`) in `crates/engine/src/cmd/edit.rs`
-- the brush tooltip in `crates/ui-egui/src/ribbon.rs`
+- the brush tooltip in `crates/ui-egui/src/ribbon/home.rs`
 
 Test: `control_shift_c_picks_up_the_format_for_the_next_cell_clicked_or_moved_to` (which also
 checks that Cmd+S doesn't pick up the painter).
@@ -202,7 +202,7 @@ white). Frozen rows lost their column gridlines when scrolling down. The cause: 
 lines out to the start of the next column or row, which past a freeze is in the scrolled pane. The
 pane's far edges now come from its own last column and row.
 
-Where it lived: `gridlines()` (used by `paint_quadrant`) in `crates/ui-egui/src/grid.rs`.
+Where it lived: `gridlines()` (used by `paint_quadrant`) in `crates/ui-egui/src/grid/quadrant.rs`; its test is in `grid/selection.rs`.
 
 Test: `frozen_panes_keep_their_gridlines_when_scrolled`.
 
@@ -239,8 +239,8 @@ This deliberately differs from Excel.
   every dialog's OK/Cancel row uses.
 - **A green ring** (`Tokens::accent`) marks the focused control.
 
-Where it lived: `format_cells`, `list_item`, `arrow_step`, `QUICK_FORMATS` and
-`ok_cancel_buttons` in `crates/ui-egui/src/dialogs.rs`. Unselected list entries use
+Where it lived: `format_cells`, `list_item`, `arrow_step` and `QUICK_FORMATS` in
+`crates/ui-egui/src/dialogs/format_cells.rs`, and `ok_cancel_buttons` in `dialogs/show.rs`. Unselected list entries use
 `Sense::CLICK` without `FOCUSABLE`, so Tab passes over them. The Tab wrap is decided at the start
 of the frame from last frame's first and last stops (egui temp data `formatCells.tabEnds`), because
 egui moves focus as each widget is drawn.
@@ -291,17 +291,35 @@ In this fork, dark mode darkens the cells too:
 - Charts, Print Preview and printing stay white.
 
 Where it lived:
-- `Tokens::dark()` (`grid_bg`, `gridline`, `cell_text`, `sel_fill`, `sel_border`) in
-  `crates/ui-egui/src/theme.rs`.
-- `sheet_ink()`, its uses in `paint_quadrant`, and the in-cell editor's fill and
-  `override_text_color` in `crates/ui-egui/src/grid.rs`.
+- The dark values of `grid_bg`, `gridline`, `cell_text`, `sel_fill`, `sel_border` and
+  `sheet_ref_colors` in `Tokens::palette()` in `crates/ui-egui/src/theme.rs`. Since 0.12 the
+  reference colours typed in the in-cell editor are the dark theme's light ones
+  (`DARK_REF_COLORS`), which upstream's WCAG contrast test asks for on a dark sheet.
+- `sheet_ink()` in `crates/ui-egui/src/grid/cell_paint.rs`, its uses in `paint_quadrant`
+  (`grid/quadrant.rs`), and the in-cell editor's fill and `override_text_color` in
+  `grid/editor.rs`.
 - The `cell_text_color` line in `editor_widget` in `crates/ui-egui/src/formula_bar.rs`.
 
-Test: `grid::tests::dark_sheet_lightens_ink_that_would_vanish`.
+Tests: `grid::tests::dark_sheet_lightens_ink_that_would_vanish`, and upstream's
+`sheet_tokens_follow_the_sheet_not_the_theme` (theme.rs), changed to the fork's dark sheet.
 
 ## Merging upstream
 
-Last merged: upstream main after 0.11.1 (`530a8cc8`), on 2026-10-23. Things to watch when merging:
+Last merged: upstream main after 0.12.1 (`45f5ab18`), on 2026-10-26. Things to watch when merging:
+
+- **0.12 split the big UI files into folders:** `grid.rs` into `grid/*.rs`, `ribbon.rs` into
+  `ribbon/*.rs`, `dialogs.rs` into `dialogs/*.rs`, `theme.rs` tests into `theme/tests.rs`, and the
+  engine's `cmd/edit.rs` and `cmd/print.rs` into `cmd/edit/*.rs` and `cmd/print/*.rs`. Git shows
+  each as one huge conflict. Take upstream's file and re-apply the fork's diff
+  (`git diff <merge-base> HEAD -- <file>`) hunk by hunk where the code now lives. The "Where it
+  lived" lines above give the new homes.
+- **egui 0.37:** `Id::new` is deprecated (use `Id::unique`), and `Workbook::active_sheet` is a
+  method now.
+- **Upstream tests that assume Excel's behaviour** were changed to the fork's:
+  `sheet_tokens_follow_the_sheet_not_the_theme` (section 18) and
+  `in_cell_editor_keeps_the_cells_height` (upstream's `in_cell_editor_grows_with_every_line`,
+  section 5). The editor-width helpers `editor_width` and `editor_slack`, and their tests, were
+  dropped (section 5).
 
 - **Conflicts so far:** the keyboard shortcuts in `ribbon.rs` (section 2), tests appended to the end of
   `crates/ui-egui/tests/it/interaction.rs` (keep both sides; it was `tests/interaction.rs` before
