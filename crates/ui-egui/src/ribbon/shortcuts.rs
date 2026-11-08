@@ -1,4 +1,4 @@
-use super::*;
+use super::{Key, Modifiers, SheetApp, json};
 
 /// Cmd++: inserts whole rows or columns before the selected ones, or asks how to shift cells.
 /// Insert works on one area at a time, so several areas still go through the dialog.
@@ -73,10 +73,9 @@ pub fn shortcut(app: &mut SheetApp, key: Key, m: Modifiers) {
                 None
             }
         },
-        // This fork: Plus without Shift is keypad + (or a layout with an unshifted +), and Cmd+=
-        // also inserts when whole rows or columns are selected.
-        Key::Plus => insert_lines(app),
-        Key::Equals if shift || whole_lines(app).is_some() => insert_lines(app),
+        // The numpad's + arrives as Plus without Shift; Excel takes Ctrl with it as well. This
+        // fork: Cmd+= also inserts when whole rows or columns are selected.
+        Key::Plus | Key::Equals if shift || key == Key::Plus || whole_lines(app).is_some() => insert_lines(app),
         Key::Semicolon => {
             // Insert today's date.
             let text = app

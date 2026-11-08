@@ -1,6 +1,6 @@
 # Custom preferences (jaredrooprai/gridcraft)
 
-_Last updated: 2026-10-26._
+_Last updated: 2026-11-08._
 
 This fork of GridCraft (`main` on `jaredrooprai/gridcraft`; upstream is `storytold/gridcraft`)
 carries behaviour changes that its owner wants kept. Some deliberately differ from Excel. This
@@ -45,8 +45,9 @@ Where it lived: `crates/ui-egui/src/ribbon/shortcuts.rs`, in `shortcut()` and `i
 
 Upstream 0.8.0 added Excel's version of this (Ctrl+Shift+= and Ctrl+− on whole rows or columns,
 with `whole_lines()` covering several areas and `single_area()` sending a multi-area insert to the
-dialog). The fork keeps upstream's checks and adds only two things on top: keypad + (a `Key::Plus`
-without Shift) inserts, and Cmd+= inserts when whole rows or columns are selected.
+dialog). Upstream now also takes the keypad + (a `Key::Plus` without Shift) itself. The fork keeps
+upstream's checks and adds only one thing on top: Cmd+= inserts when whole rows or columns are
+selected (`|| whole_lines(app).is_some()` in the `Key::Plus | Key::Equals` guard).
 
 Test: `cmd_plus_and_minus_insert_and_delete_whole_rows_and_columns`.
 
@@ -62,8 +63,14 @@ This matches Excel.
 - **Pointing works after a leading sign.** With `+`, `-`, `+20+` or `-5-` typed, an arrow or
   click inserts a reference.
 
-Where it lived: `input_to_cell` in `crates/engine/src/cmd/edit/cell.rs`; `EditState::is_formula` and
-`can_point` in `crates/ui-egui/src/editor.rs`.
+Where it lived: `input_to_cell` and `is_signed_arithmetic` in `crates/engine/src/cmd/edit/cell.rs`;
+`EditState::is_formula` and `can_point` in `crates/ui-egui/src/editor.rs`.
+
+Upstream's `is_formula_input` (same file) now takes `+SUM(1)` and `-(2)` itself, a sign followed by a
+name or a parenthesis. The fork adds the sign-then-digit case (`+20+20`) as a separate
+`is_signed_arithmetic`, so `is_formula_input`, which the recent-functions scan runs on every string
+of a paste, stays cheap. `EditState::is_formula` keeps the fork's rule (any leading `=`, `+` or `-`)
+with upstream's Python-mode guard in front.
 
 Tests: `a_leading_sign_starts_a_formula` and `a_leading_sign_points_like_equals`.
 
@@ -75,11 +82,13 @@ While pointing in a formula, Cmd+arrow (Ctrl+arrow on Windows and Linux) moves t
 the edge of the data, like Cmd+arrow in the grid. From a cell below `A1:A5`, it goes to `A5`,
 then `A1`. A new reference, after another operator, jumps from the edited cell.
 
-Where it lived: `point_move` in `crates/ui-egui/src/grid/interact.rs` and the arrow handling in
-`crates/ui-egui/src/formula_bar.rs`. `EditState::point_origin` (editor.rs) picks the start: the
-last pointed cell only while the caret is at the end of that reference (upstream's
-`point_at_caret`), else the edited cell. Upstream's Shift+arrow `point_anchor` is ignored for a
-new reference for the same reason. Upstream's `pointing_along_a_frozen_row_keeps_the_edited_cell_in_view`
+Upstream now has the jump itself (`editor_arrow_keys` in `crates/ui-egui/src/formula_bar.rs` and
+`point_move` in `crates/ui-egui/src/grid/interact.rs`, with its own test
+`ctrl_arrows_in_point_mode_jump_to_the_edge_of_the_data`). What the fork keeps on top is where a
+new reference starts: `EditState::point_origin` (editor.rs) picks the last pointed cell only while
+the caret is at the end of that reference (upstream's `point_at_caret`), else the edited cell, and
+`point_move` calls it. Upstream's Shift+arrow `point_anchor` is ignored for a new reference for the
+same reason (`continues` in `point_move`). Upstream's `pointing_along_a_frozen_row_keeps_the_edited_cell_in_view`
 sets `point_cell` without a pointed reference; the fork's copy also sets `point`.
 
 Test: `cmd_arrows_in_point_mode_jump_to_the_data_edge`.
@@ -194,17 +203,17 @@ Where it lived:
 Test: `control_shift_c_picks_up_the_format_for_the_next_cell_clicked_or_moved_to` (which also
 checks that Cmd+S doesn't pick up the painter).
 
-## 13. Frozen panes keep their gridlines when scrolled (fix)
+## 13. Frozen panes keep their gridlines when scrolled (fixed upstream, nothing to port)
 
-This is a bug fix rather than a preference; check whether upstream has fixed it before porting.
-With columns frozen, scrolling right left the frozen columns without row gridlines (they looked
-white). Frozen rows lost their column gridlines when scrolling down. The cause: each pane drew its
-lines out to the start of the next column or row, which past a freeze is in the scrolled pane. The
-pane's far edges now come from its own last column and row.
+This was a bug fix rather than a preference. With columns frozen, scrolling right left the frozen
+columns without row gridlines (they looked white). Frozen rows lost their column gridlines when
+scrolling down. The cause: each pane drew its lines out to the start of the next column or row,
+which past a freeze is in the scrolled pane.
 
-Where it lived: `gridlines()` (used by `paint_quadrant`) in `crates/ui-egui/src/grid/quadrant.rs`; its test is in `grid/selection.rs`.
-
-Test: `frozen_panes_keep_their_gridlines_when_scrolled`.
+Upstream fixed it (#2544) with `Geo::x_end` and `Geo::y_end`, which `paint_gridlines` in
+`grid/quadrant.rs` uses for the pane's far edges. On 2026-11-08 the fork dropped its own
+`gridlines()` helper and its test `frozen_panes_keep_their_gridlines_when_scrolled`; upstream's
+`tests/it/text_overflow_scroll.rs` covers the lines.
 
 ## 14. Cmd+2 opens Zoom
 
@@ -288,6 +297,12 @@ In this fork, dark mode darkens the cells too:
   - A cell with its own fill keeps its colours.
 - The in-cell editor picks black or white ink for its text, the same way it already did for the
   caret.
+- What upstream draws straight on the cells (the macro Check and debugging outlines, trace arrows,
+  the PY tag) is lighter on the dark sheet, so it keeps the 3:1 contrast upstream's WCAG test asks
+  for. The PY tag takes the formula bar badge's light green with dark text.
+- Form controls on the sheet (filter buttons, sliders, buttons) keep their own light look in both
+  themes, as upstream has it. The active row's tint (`active_row`) already has a dark value
+  upstream.
 - Charts, Print Preview and printing stay white.
 
 Where it lived:
@@ -295,6 +310,10 @@ Where it lived:
   `sheet_ref_colors` in `Tokens::palette()` in `crates/ui-egui/src/theme.rs`. Since 0.12 the
   reference colours typed in the in-cell editor are the dark theme's light ones
   (`DARK_REF_COLORS`), which upstream's WCAG contrast test asks for on a dark sheet.
+- The `DARK_SHEET_*` constants beside them (macro overlays, trace arrows, PY tag), picked in
+  `palette()` for `sheet_macro_*`, `sheet_trace_*`, `sheet_py_tag` and `on_sheet_py_tag`. Any new
+  token upstream draws on the cells needs a dark value too: `token_pairs_meet_wcag_contrast_in_both_themes`
+  fails when one doesn't have 3:1 on `0x1F1F1F`.
 - `sheet_ink()` in `crates/ui-egui/src/grid/cell_paint.rs`, its uses in `paint_quadrant`
   (`grid/quadrant.rs`), and the in-cell editor's fill and `override_text_color` in
   `grid/editor.rs`.
@@ -302,30 +321,50 @@ Where it lived:
 
 Tests: `grid::tests::dark_sheet_lightens_ink_that_would_vanish`, and upstream's
 `sheet_tokens_follow_the_sheet_not_the_theme` (theme.rs), changed to the fork's dark sheet.
+Upstream's `grid::show::trace_arrow_tests` name the light theme's arrow colours, so the fork's copy
+of `lines_in` draws in a light context (`ctx.set_theme(egui::Theme::Light)`).
 
 ## Merging upstream
 
-Last merged: upstream main after 0.12.1 (`45f5ab18`), on 2026-10-26. Things to watch when merging:
+Last merged: upstream main at `2c58c769` (v0.16.0 plus 326 commits, on the way to 0.17), on
+2026-11-08. Tags v0.16.1 and v0.17.0 are on upstream's `release` branch, not on `main`. Things to
+watch when merging:
 
-- **0.12 split the big UI files into folders:** `grid.rs` into `grid/*.rs`, `ribbon.rs` into
-  `ribbon/*.rs`, `dialogs.rs` into `dialogs/*.rs`, `theme.rs` tests into `theme/tests.rs`, and the
-  engine's `cmd/edit.rs` and `cmd/print.rs` into `cmd/edit/*.rs` and `cmd/print/*.rs`. Git shows
-  each as one huge conflict. Take upstream's file and re-apply the fork's diff
-  (`git diff <merge-base> HEAD -- <file>`) hunk by hunk where the code now lives. The "Where it
-  lived" lines above give the new homes.
+- **Big files get split into folders.** Git shows each as one huge conflict. Take upstream's file
+  and re-apply the fork's diff (`git diff <merge-base> HEAD -- <file>`) hunk by hunk where the code
+  now lives. The "Where it lived" lines above give the homes as of this merge. 0.12 split
+  `grid.rs`, `ribbon.rs`, `dialogs.rs`, the `theme.rs` tests, and the engine's `cmd/edit.rs` and
+  `cmd/print.rs`. Up to 0.17 upstream also:
+  - split `keymap.rs`'s `lookup` into a chain of `lookup_*` functions. The fork's arms are in
+    `lookup_number_formats` (Control+Shift+C), `lookup_platform_letters` (Control+7, Control+D/R)
+    and `lookup_alt_shortcuts` (Option+Left/Right, Cmd+2).
+  - moved the editor's key handling in `formula_bar.rs` into `editor_shortcuts`,
+    `editor_confirm_keys` and `editor_arrow_keys`.
+  - split `paint_quadrant` in `grid/quadrant.rs` into `paint_gridlines`, `paint_backgrounds`,
+    `paint_cells` and `paint_borders`.
+  - moved `SheetApp` methods into `app/*.rs`.
+  - dropped `use super::*` from the dialog files, so the fork's `format_cells.rs` and `zoom.rs`
+    list the names they use (`Key`, `vec2`, `take_first_focus`, `ok_cancel_buttons`).
 - **egui 0.37:** `Id::new` is deprecated (use `Id::unique`), and `Workbook::active_sheet` is a
   method now.
 - **Upstream tests that assume Excel's behaviour** were changed to the fork's:
-  `sheet_tokens_follow_the_sheet_not_the_theme` (section 18) and
-  `in_cell_editor_keeps_the_cells_height` (upstream's `in_cell_editor_grows_with_every_line`,
-  section 5). The editor-width helpers `editor_width` and `editor_slack`, and their tests, were
-  dropped (section 5).
-
-- **Conflicts so far:** the keyboard shortcuts in `ribbon.rs` (section 2), tests appended to the end of
-  `crates/ui-egui/tests/it/interaction.rs` (keep both sides; it was `tests/interaction.rs` before
-  0.11), and in 0.11: the in-cell editor's size (section 5), `point_move` and `point_origin`
-  (section 4), the Zoom dialog (section 8), the Format Painter on release (section 12) and the
-  Format Painter tooltip in `ribbon.rs`.
+  - `sheet_tokens_follow_the_sheet_not_the_theme` (section 18) and `lines_in` in
+    `grid::show::trace_arrow_tests` (section 18).
+  - `in_cell_editor_keeps_the_cells_height` (upstream's `in_cell_editor_grows_with_every_line`,
+    section 5). The editor-width helpers `editor_width` and `editor_slack`, and their tests, were
+    dropped (section 5).
+  - `unshifted_equals_inserts_whole_lines_but_nothing_else` (upstream's
+    `unshifted_equals_inserts_nothing`, section 2).
+  - `set_values_reports_the_strings_typed_input_read` sets `default_number_format = "General"`
+    (section 6).
+- **Conflicts so far:** the keyboard shortcuts in `ribbon.rs`/`ribbon/shortcuts.rs` (section 2),
+  tests appended to the end of `crates/ui-egui/tests/it/interaction.rs` (keep both sides; it was
+  `tests/interaction.rs` before 0.11) and the module list in `tests/it/main.rs` (keep both),
+  and the in-cell editor's size (section 5), `point_move` and `point_origin` (section 4), the
+  Zoom dialog (section 8), the Format Painter on release (section 12) and its tooltip in
+  `ribbon.rs`. Also `input_to_cell` (section 3), `new_workbook` (section 6), `EditState::is_formula`
+  (section 3), the Delete key (section 11), `paint_quadrant` (section 18) and the Format Cells and
+  Zoom imports.
 - **Tooltips:** since 0.11 ribbon tooltips get their shortcut from `TOOLTIP_SHORTCUTS` in
   `widgets.rs`, so "Save (⌘S)"-style keys are gone from the i18n catalogs. `ja.rs` counts
   `pt.rs`'s keys: a stray key there fails `covers_every_key_the_portuguese_catalog_translates`.
@@ -333,6 +372,12 @@ Last merged: upstream main after 0.12.1 (`45f5ab18`), on 2026-10-26. Things to w
   `()` value off Linux; the fork allows `clippy::let_unit_value` on that one line for non-Linux
   builds.
 - **The wasm step** of `cargo xtask ci` needs `rustup target add wasm32-unknown-unknown`.
+- **Test fonts.** Without `CRAFT_FONTS_DIR` the test harness installs only egui's bundled faces,
+  and `column_autocomplete_folds_case_beyond_ascii` and
+  `language_switch_renders_the_ribbon_and_persists` panic with "No glyph for …". That is the
+  machine, not a merge problem. To run them, fetch the commit named in `craft-fonts-ref` in
+  `.github/workflows/ci.yml` (`git fetch --depth 1 origin <sha>` into an empty folder outside the
+  repo) and set `CRAFT_FONTS_DIR=<that folder>` for `cargo test`.
 
 ## Keeping this file current
 

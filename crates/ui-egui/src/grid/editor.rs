@@ -1,6 +1,6 @@
 use super::cell_paint::ink_on;
 use super::geo::Geo;
-use super::*;
+use super::{Align2, CellRef, FontId, PatternType, Rect, Sheet, SheetApp, Stroke, StrokeKind, Tokens, Workbook, json, pos2, theme, vec2};
 
 /// Draws the in-cell editor at the cell's size (this fork), mirroring for right-to-left sheets, choosing contrasting caret ink and clipping cells hidden under frozen panes.
 pub(super) fn in_cell_editor(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, sh: &Sheet, wb: &Workbook) {
@@ -98,7 +98,7 @@ pub(super) fn list_picker(app: &mut SheetApp, ui: &mut egui::Ui, geo: &Geo, was_
         app.grid.list_picker = None;
         return;
     };
-    let items = gridcraft_engine::cmd::data::list_items(&wb, si, &dv);
+    let items = gridcraft_engine::cmd::data::list_items(&wb, si, c, &dv);
     let r = geo.cell_rect(sh, c);
     // Fit the popup to its rows (up to LIST_PICKER_MAX_ROWS); without a minimum the scroll area collapses to its 64 px default.
     let height = list_picker_height(items.len(), LIST_PICKER_ROW_H, ui.spacing().item_spacing.y);

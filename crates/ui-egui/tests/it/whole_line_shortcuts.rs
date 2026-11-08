@@ -1,4 +1,4 @@
-//! Ctrl+Shift+= and Ctrl+- on whole rows or columns insert or delete them at once, as in Excel;
+//! Ctrl+Shift+= (or Ctrl with the numpad's +) and Ctrl+- on whole rows or columns insert or delete them at once, as in Excel;
 //! any other selection opens the Insert or Delete dialog.
 
 use egui::{Key, Modifiers};
@@ -55,6 +55,33 @@ fn whole_columns_are_inserted_and_deleted_at_once() {
     assert_eq!(value(&h, "B1"), Value::from("a1"));
     press(&mut h, Key::Minus, false);
     assert_eq!(value(&h, "A1"), Value::from("a1"));
+}
+
+#[test]
+fn numpad_plus_inserts_without_shift() {
+    let mut h = harness("2:2");
+    press(&mut h, Key::Plus, false);
+    assert!(h.state().dialog.is_none(), "no dialog for whole rows");
+    assert!(value(&h, "A2").is_empty(), "a row was inserted above row 2");
+    assert_eq!(value(&h, "A3"), Value::from("a2"));
+}
+
+/// This fork: Cmd+= (no Shift) inserts whole rows or columns too, as Cmd++ does; on any other
+/// selection it still does nothing (Excel's own Ctrl+= is not a shortcut).
+#[test]
+fn unshifted_equals_inserts_whole_lines_but_nothing_else() {
+    let mut h = harness("2:2");
+    press(&mut h, Key::Equals, false);
+    assert!(h.state().dialog.is_none(), "no dialog for whole rows");
+    assert!(value(&h, "A2").is_empty(), "a row was inserted above row 2");
+    assert_eq!(value(&h, "A3"), Value::from("a2"));
+    let mut h = harness("A:A");
+    press(&mut h, Key::Equals, false);
+    assert_eq!(value(&h, "B1"), Value::from("a1"), "a column was inserted before column A");
+    let mut h = harness("A2:B2");
+    press(&mut h, Key::Equals, false);
+    assert!(h.state().dialog.is_none(), "a plain range gets no Insert dialog from Cmd+=");
+    assert_eq!(value(&h, "A2"), Value::from("a2"));
 }
 
 #[test]

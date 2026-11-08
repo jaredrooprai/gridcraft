@@ -3,7 +3,7 @@ use super::geo::Geo;
 use super::interact::{hidden_col_edge, hidden_row_edge};
 #[cfg(test)]
 use super::show::hidden_around;
-use super::*;
+use super::{CellRef, Color32, Painter, RangeRef, Rect, Sheet, SheetApp, Stroke, StrokeKind, Tokens, json, pos2, vec2};
 
 /// Where the active cell is on screen: the whole merged cell when it is part of one.
 fn active_rect(geo: &Geo, sh: &Sheet, sel: &gridcraft_engine::Selection) -> Rect {
@@ -78,18 +78,20 @@ pub(crate) fn outline_bands(rect: Rect, width: f32, clip: Rect) -> Vec<Rect> {
 }
 
 /// `outline` is where the current area's border is drawn this frame (see `selection_glide`).
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn paint_selection(
-    p: &Painter,
-    geo: &Geo,
-    sh: &Sheet,
-    sel: &gridcraft_engine::Selection,
-    outline: Rect,
-    t: &Tokens,
-    app: &SheetApp,
-    rows: (u32, u32),
-    cols: (u32, u32),
-) {
+pub(crate) struct SelectionPaintInput<'a> {
+    pub(crate) painter: &'a Painter,
+    pub(crate) geo: &'a Geo,
+    pub(crate) sheet: &'a Sheet,
+    pub(crate) selection: &'a gridcraft_engine::Selection,
+    pub(crate) outline: Rect,
+    pub(crate) tokens: &'a Tokens,
+    pub(crate) app: &'a SheetApp,
+    pub(crate) rows: (u32, u32),
+    pub(crate) cols: (u32, u32),
+}
+
+pub(crate) fn paint_selection(input: SelectionPaintInput<'_>) {
+    let SelectionPaintInput { painter: p, geo, sheet: sh, selection: sel, outline, tokens: t, app, rows, cols } = input;
     // Fill all areas except the active cell.
     for rect in selection_fill_where(geo, sh, sel, outline, |r| range_in_pane(*r, rows, cols)) {
         p.rect_filled(rect, 0.0, t.sel_fill);
@@ -391,34 +393,6 @@ mod pane_tests {
         let handle = geo.range_rect(&sh, rng(5, 3, 6, 4)).right_bottom();
         assert!(handle.x < split.x);
         assert!(!geo.range_panes(rng(6, 4, 6, 4)).iter().any(|r| r.contains(handle)));
-    }
-
-    #[test]
-    fn frozen_panes_keep_their_gridlines_when_scrolled() {
-        use super::super::quadrant::gridlines;
-        let mut sh = Sheet::new("S");
-        let mut geo = frozen_geo(&mut sh);
-        geo.scroll.y = 5.0 * sh.default_row_height + 3.0;
-        let geo = Geo::new(&sh, geo.rect, geo.scroll);
-        // Horizontal and vertical gridline lengths drawn for one pane.
-        let lines = |rows: (u32, u32), cols: (u32, u32)| {
-            let (mut h, mut v) = (Vec::new(), Vec::new());
-            for [a, b] in gridlines(&geo, &sh, rows, cols) {
-                if a.y == b.y {
-                    h.push(b.x - a.x);
-                } else {
-                    v.push(b.y - a.y);
-                }
-            }
-            (h, v)
-        };
-        let (frozen_w, frozen_h) = (geo.frozen_w, geo.frozen_h);
-        // The frozen columns' row lines span both columns, and the frozen rows' column lines both
-        // rows, however far the sheet scrolled.
-        let (h, _) = lines((7, 20), (0, 1));
-        assert!(!h.is_empty() && h.iter().all(|w| (w - frozen_w).abs() < 0.5), "{h:?}");
-        let (_, v) = lines((0, 1), (5, 10));
-        assert!(!v.is_empty() && v.iter().all(|w| (w - frozen_h).abs() < 0.5), "{v:?}");
     }
 }
 
