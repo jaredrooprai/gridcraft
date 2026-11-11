@@ -1,6 +1,6 @@
 # Custom preferences (jaredrooprai/gridcraft)
 
-_Last updated: 2026-11-08._
+_Last updated: 2026-11-11._
 
 This fork of GridCraft (`main` on `jaredrooprai/gridcraft`; upstream is `storytold/gridcraft`)
 carries behaviour changes that its owner wants kept. Some deliberately differ from Excel. This
@@ -326,9 +326,9 @@ of `lines_in` draws in a light context (`ctx.set_theme(egui::Theme::Light)`).
 
 ## Merging upstream
 
-Last merged: upstream main at `2c58c769` (v0.16.0 plus 326 commits, on the way to 0.17), on
-2026-11-08. Tags v0.16.1 and v0.17.0 are on upstream's `release` branch, not on `main`. Things to
-watch when merging:
+Last merged: upstream main at `6dbfbc40` (v0.19.0 plus the craft-update and Harden-Runner
+commits), on 2026-11-11. The previous merge was `2c58c769` (v0.16.0 plus 326 commits) on
+2026-11-08. Things to watch when merging:
 
 - **Big files get split into folders.** Git shows each as one huge conflict. Take upstream's file
   and re-apply the fork's diff (`git diff <merge-base> HEAD -- <file>`) hunk by hunk where the code
@@ -357,6 +357,10 @@ watch when merging:
     `unshifted_equals_inserts_nothing`, section 2).
   - `set_values_reports_the_strings_typed_input_read` sets `default_number_format = "General"`
     (section 6).
+  - `tests/arabic_editing.rs` (0.19) widens column A in its `editing` helper (section 5: the
+    fork's editor scrolls text that overflows the cell, so the click on the text's right edge
+    missed). Its `caret_after_typing_arabic_is_drawn_at_its_left_end` also fails on pristine
+    upstream on macOS (caret at x=10 of 0–26.9), so that one failure isn't the fork's.
 - **Conflicts so far:** the keyboard shortcuts in `ribbon.rs`/`ribbon/shortcuts.rs` (section 2),
   tests appended to the end of `crates/ui-egui/tests/it/interaction.rs` (keep both sides; it was
   `tests/interaction.rs` before 0.11) and the module list in `tests/it/main.rs` (keep both),
@@ -364,7 +368,9 @@ watch when merging:
   Zoom dialog (section 8), the Format Painter on release (section 12) and its tooltip in
   `ribbon.rs`. Also `input_to_cell` (section 3), `new_workbook` (section 6), `EditState::is_formula`
   (section 3), the Delete key (section 11), `paint_quadrant` (section 18) and the Format Cells and
-  Zoom imports.
+  Zoom imports. In 0.19 upstream's right-to-left text work rewrote `paint_cell` in
+  `grid/quadrant.rs`: keep `let color = sheet_ink(..)` and add upstream's `direction` line after it
+  (its new `layout` closure reuses `color`, so #### and repeat fills keep the dark-sheet ink).
 - **Tooltips:** since 0.11 ribbon tooltips get their shortcut from `TOOLTIP_SHORTCUTS` in
   `widgets.rs`, so "Save (⌘S)"-style keys are gone from the i18n catalogs. `ja.rs` counts
   `pt.rs`'s keys: a stray key there fails `covers_every_key_the_portuguese_catalog_translates`.
