@@ -1898,3 +1898,20 @@ fn cmd_right_and_down_reach_the_last_column_and_row_and_stay_there() {
         }
     }
 }
+
+#[test]
+fn plus_then_selecting_cells_enters_their_sum() {
+    let mut s = blank();
+    s.execute("range.setValues", json!({"range": "A1:A3", "values": [[1], [2], [3]]})).unwrap();
+    s.execute("selection.set", json!({"cell": "A4"})).unwrap();
+    let mut h = harness(s);
+    text(&mut h, "+");
+    key(&mut h, Key::ArrowUp, Modifiers::NONE);
+    key(&mut h, Key::ArrowUp, Modifiers::SHIFT);
+    key(&mut h, Key::ArrowUp, Modifiers::SHIFT);
+    key(&mut h, Key::Enter, Modifiers::NONE);
+    let sh = h.state().session.active().unwrap().wb.active().unwrap();
+    let a4 = sh.cell(CellRef::parse("A4").unwrap()).unwrap();
+    assert!(a4.bar_text().starts_with("=SUM(A"), "{}", a4.bar_text());
+    assert_eq!(a4.value, Value::Number(6.0));
+}

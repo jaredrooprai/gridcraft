@@ -328,6 +328,48 @@ fn a_leading_sign_starts_a_formula() {
 }
 
 #[test]
+fn plus_and_selected_cells_sum_them() {
+    let mut s = Session::new();
+    s.new_workbook();
+    s.execute("range.setValues", json!({"range": "A1:C3", "values": [[1, 2, 3], [4, 5, 6], [7, 8, 9]]})).unwrap();
+    s.execute("home.insertSheet", json!({"name": "Other Sheet"})).unwrap();
+    s.execute("range.setValues", json!({"range": "'Other Sheet'!A1:A2", "values": [[100], [200]]})).unwrap();
+    s.execute("sheet.activate", json!({"sheet": 0})).unwrap();
+    for (cell, input) in [
+        ("E1", "+A1:A3"),
+        ("E2", "+A1:A3,C1:C3"),
+        ("E3", "+A1:A3+C1"),
+        ("E4", "+$B$1:$B$3"),
+        ("E5", "+'Other Sheet'!A1:A2"),
+        ("E6", "+A1"),
+        ("E7", "+A1+B1"),
+        ("E8", "+A1:A3*2"),
+        ("E9", "+A1,B1"),
+    ] {
+        s.execute("cell.set", json!({"cell": cell, "input": input})).unwrap();
+    }
+    let bar = |s: &Session, a: &str| s.doc().unwrap().wb.active().unwrap().cell(CellRef::parse(a).unwrap()).map(|c| c.bar_text());
+    let get = |s: &mut Session, a: &str| s.execute("cell.get", json!({"cell": a})).unwrap()["value"].clone();
+    assert_eq!(bar(&s, "E1").as_deref(), Some("=SUM(A1:A3)"));
+    assert_eq!(get(&mut s, "E1"), json!(12.0));
+    assert_eq!(bar(&s, "E2").as_deref(), Some("=SUM(A1:A3,C1:C3)"));
+    assert_eq!(get(&mut s, "E2"), json!(30.0));
+    assert_eq!(bar(&s, "E3").as_deref(), Some("=SUM(A1:A3,C1)"));
+    assert_eq!(get(&mut s, "E3"), json!(15.0));
+    assert_eq!(get(&mut s, "E4"), json!(15.0));
+    assert_eq!(bar(&s, "E5").as_deref(), Some("=SUM('Other Sheet'!A1:A2)"));
+    assert_eq!(get(&mut s, "E5"), json!(300.0));
+    // A lone cell and cells added with `+` already mean what was typed.
+    assert_eq!(bar(&s, "E6").as_deref(), Some("=+A1"));
+    assert_eq!(bar(&s, "E7").as_deref(), Some("=+A1+B1"));
+    // Anything but references is left to the formula as typed.
+    assert_eq!(bar(&s, "E8").as_deref(), Some("=+A1:A3*2"));
+    // Two cells Cmd-clicked are summed too.
+    assert_eq!(bar(&s, "E9").as_deref(), Some("=SUM(A1,B1)"));
+    assert_eq!(get(&mut s, "E9"), json!(3.0));
+}
+
+#[test]
 fn legacy_array_entry() {
     let mut s = Session::new();
     s.new_workbook();

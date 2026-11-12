@@ -324,7 +324,29 @@ Tests: `grid::tests::dark_sheet_lightens_ink_that_would_vanish`, and upstream's
 Upstream's `grid::show::trace_arrow_tests` name the light theme's arrow colours, so the fork's copy
 of `lines_in` draws in a light context (`ctx.set_theme(egui::Theme::Light)`).
 
-## 19. Cmd+Right and Cmd+Down reach the sheet's last column and row (bug fix)
+## 19. `+` and a selection of cells enters their sum
+
+This deliberately differs from Excel, where `+A1:A5` is a formula that returns the range (and
+`+A1,B1` is an error). Here, confirming `+` followed only by references enters `=SUM(…)` of them:
+
+- **`+` then a dragged or Shift+arrow range:** `+A1:A5` becomes `=SUM(A1:A5)`.
+- **Cmd-clicked areas:** `+A1:A3,C1:C3` becomes `=SUM(A1:A3,C1:C3)`, and `+A1,B1` becomes
+  `=SUM(A1,B1)`.
+- **Areas joined with `+`:** `+A1:A3+C1` becomes `=SUM(A1:A3,C1)`.
+- **Left as typed:** a lone cell (`+A1`), cells joined only with `+` (`+A1+B1`, already a sum),
+  and anything with other operators, numbers or functions (`+A1:A3*2`).
+- Sheet-qualified and absolute references work (`+'Other Sheet'!A1:A2`, `+$B$1:$B$3`).
+- In the English formula language only: other languages' list separators go through the UI's
+  formula translation first, which refuses a top-level list.
+
+Where it lived: `plus_selection_sum` in `crates/engine/src/cmd/edit/cell.rs`, called first in
+`input_to_cell`. It parses `SUM(<rest>)`, so commas are arguments, and accepts only references
+joined by `+`.
+
+Tests: `plus_and_selected_cells_sum_them` (`crates/engine/src/cmd/edit/tests.rs`) and
+`plus_then_selecting_cells_enters_their_sum` (`crates/ui-egui/tests/it/interaction.rs`).
+
+## 20. Cmd+Right and Cmd+Down reach the sheet's last column and row (bug fix)
 
 A bug fix, not a preference; upstream has no issue for it. Cmd+Right on an empty row selected
 XFD1, but the view stopped about 80% of the way across (around column SJC), and each further move

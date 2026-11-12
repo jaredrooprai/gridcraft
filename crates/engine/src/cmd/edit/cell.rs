@@ -31,6 +31,47 @@ fn is_signed_arithmetic(input: &str) -> bool {
         && gridcraft_formula::parse(input).is_ok()
 }
 
+/// Fork preference: `+` followed only by references sums them. Typing `+` and selecting cells
+/// (`+A1:A5`), Cmd-clicking more areas (`+A1:A3,C1:C3`) or adding them with `+` (`+A1:A3+C1`)
+/// enters `=SUM(…)` of those references. A lone cell (`+A1`) and cells added with `+` only
+/// (`+A1+B1`) already compute what was meant, so they stay as typed (`None`).
+fn plus_selection_sum(input: &str) -> Option<gridcraft_formula::Expr> {
+    use gridcraft_formula::{BinOp, Expr, RefKind};
+    let rest = input.strip_prefix('+')?;
+    if rest.is_empty() || rest.starts_with(['+', '-', '=']) {
+        return None;
+    }
+    // Inside `SUM(…)` the commas separate arguments, so the areas Cmd+click points are parsed too.
+    let Ok(Expr::Call(_, args)) = gridcraft_formula::parse(&format!("SUM({rest})")) else { return None };
+    let is_ref = |e: &Expr| matches!(e, Expr::Ref(_));
+    let mut refs = Vec::new();
+    let mut multi_cell = args.len() > 1;
+    for arg in args {
+        // Each argument is references joined by `+` (an explicit stack: no recursion per operand).
+        let mut pending = vec![arg];
+        let mut leaves = Vec::new();
+        while let Some(e) = pending.pop() {
+            match e {
+                Expr::Binary(BinOp::Add, a, b) => {
+                    pending.push(*b);
+                    pending.push(*a);
+                }
+                Expr::Ref(r) => {
+                    multi_cell |= !matches!(r.kind, RefKind::Cell(_));
+                    leaves.push(Expr::Ref(r));
+                }
+                Expr::Binary(BinOp::Range, a, b) if is_ref(&a) && is_ref(&b) => {
+                    multi_cell = true;
+                    leaves.push(Expr::Binary(BinOp::Range, a, b));
+                }
+                _ => return None,
+            }
+        }
+        refs.extend(leaves);
+    }
+    multi_cell.then(|| Expr::Call("SUM".into(), refs))
+}
+
 /// What typing `input` into a cell produces (constant or formula, plus an automatic number
 /// format). Inherits the destination's cell, row or column style, including its number
 /// format, before parsing. Errors when the formula can't be parsed.
@@ -44,13 +85,18 @@ pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gri
     if fmt_is_text {
         return Ok(Some(Cell { value: Value::text(input), formula: None, style, py: None }));
     }
-    let is_formula = is_formula_input(input) || is_signed_arithmetic(input);
+    let selection_sum = plus_selection_sum(input);
+    let is_formula = selection_sum.is_some() || is_formula_input(input) || is_signed_arithmetic(input);
     if is_formula && gridcraft_model::python::is_py_formula(input) {
         return Err(EngineError::Other(PY_FORMULA.into()));
     }
     if is_formula {
         let body = input.strip_prefix('=').unwrap_or(input);
-        let expr = wb.name_call_case(parse_typed_formula(body)?);
+        let parsed = match selection_sum {
+            Some(sum) => sum,
+            None => parse_typed_formula(body)?,
+        };
+        let expr = wb.name_call_case(parsed);
         check_arg_counts(&expr)?;
         let mut cell = Cell::formula(Formula::from_expr(expr));
         cell.style = style;
