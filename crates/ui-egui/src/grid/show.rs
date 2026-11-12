@@ -143,17 +143,7 @@ pub fn show(app: &mut SheetApp, ui: &mut egui::Ui) {
     }
     update_zoom_glide(app, ui, place, sh.zoom, now);
     view.scroll = view.scroll.max(egui::Vec2::ZERO);
-    let (mut max_x, mut max_y) = (lines.ci.start(MAX_COLS - 20) as f32, lines.ri.start(MAX_ROWS - 40) as f32);
-    if paper {
-        // Page layout units run past sheet units (margins and gaps); the end is known once the
-        // pages reach the last row / column.
-        let g = make_geo(app, view.scroll);
-        if let Some(pg) = &g.paper {
-            let (ex, ey) = pg.extent();
-            max_x = if pg.cols_complete { (ex as f32 - g.cells.width() / g.z).max(0.0) } else { 1.0e9 };
-            max_y = if pg.rows_complete { (ey as f32 - g.cells.height() / g.z).max(0.0) } else { 1.0e9 };
-        }
-    }
+    let (max_x, max_y) = scroll_limits(&lines.ci, &lines.ri, &make_geo(app, view.scroll), paper);
     view.scroll.x = view.scroll.x.min(max_x);
     view.scroll.y = view.scroll.y.min(max_y);
     let mut geo = make_geo(app, view.scroll);
@@ -263,6 +253,29 @@ fn update_clipboard_repaint(app: &mut SheetApp, ui: &egui::Ui, now: f64) {
     }
 }
 
+/// How far the view scrolls (sheet units past the frozen lines, or page layout units).
+fn scroll_limits(ci: &super::LineIndex, ri: &super::LineIndex, g: &Geo, paper: bool) -> (f32, f32) {
+    let (mut max_x, mut max_y) = (ci.start(MAX_COLS - 20) as f32, ri.start(MAX_ROWS - 40) as f32);
+    if paper {
+        // Page layout units run past sheet units (margins and gaps); the end is known once the
+        // pages reach the last row / column.
+        if let Some(pg) = &g.paper {
+            let (ex, ey) = pg.extent();
+            max_x = if pg.cols_complete { (ex as f32 - g.cells.width() / g.z).max(0.0) } else { 1.0e9 };
+            max_y = if pg.rows_complete { (ey as f32 - g.cells.height() / g.z).max(0.0) } else { 1.0e9 };
+        }
+        return (max_x, max_y);
+    }
+    // The last column and row must fit on screen however few lines show (zoomed in, wide
+    // columns, a small window): scrolling stops once they are in view, with the 2 px the active
+    // cell keeps from the pane's edge.
+    let z = g.z.max(0.01);
+    let pane = egui::vec2(g.cells.width() - g.frozen_w, g.cells.height() - g.frozen_h) / z;
+    let end_x = (ci.start(MAX_COLS) - ci.start(g.fc)) as f32 - pane.x + 2.0 / z;
+    let end_y = (ri.start(MAX_ROWS) - ri.start(g.fr)) as f32 - pane.y + 2.0 / z;
+    (max_x.max(end_x), max_y.max(end_y))
+}
+
 struct ActiveCellVisibility<'a, F> {
     app: &'a mut SheetApp,
     wb: &'a Workbook,
@@ -325,37 +338,47 @@ impl<F: Fn(&mut SheetApp, egui::Vec2) -> Geo> ActiveCellVisibility<'_, F> {
             crate::paper_view::ensure_covers(app, wb, si, target);
             *geo = (self.make_geo)(app, view.scroll);
         }
-        let cr = geo.cell_rect(sh, target);
-        let area = Rect::from_min_max(pos2(geo.cells.left() + geo.frozen_w, geo.cells.top() + geo.frozen_h), geo.cells.max);
-        if target.row >= geo.fr {
-            if cr.top() < area.top() {
-                view.scroll.y -= (area.top() - cr.top()) / geo.z;
-            } else if cr.bottom() > area.bottom() - 2.0 {
-                view.scroll.y += (cr.bottom() - area.bottom() + 2.0) / geo.z;
+        // A second pass when the first moved the cells: rows with more digits widen the row
+        // header (row 1,048,576 after Cmd+Down), which would push the target off the pane's edge.
+        for _ in 0..2 {
+            let cr = geo.cell_rect(sh, target);
+            let area = Rect::from_min_max(pos2(geo.cells.left() + geo.frozen_w, geo.cells.top() + geo.frozen_h), geo.cells.max);
+            if target.row >= geo.fr {
+                if cr.top() < area.top() {
+                    view.scroll.y -= (area.top() - cr.top()) / geo.z;
+                } else if cr.bottom() > area.bottom() - 2.0 {
+                    view.scroll.y += (cr.bottom() - area.bottom() + 2.0) / geo.z;
+                }
+            } else if from.is_some_and(|f| f.row >= geo.fr) {
+                // A move from the scrolled rows into the frozen ones (Page Up or Ctrl+Up onto a frozen
+                // row 1) brings the scrolled rows back to their top; the rows it passed over would
+                // otherwise stay out of sight.
+                view.scroll.y = 0.0;
             }
-        } else if from.is_some_and(|f| f.row >= geo.fr) {
-            // A move from the scrolled rows into the frozen ones (Page Up or Ctrl+Up onto a frozen
-            // row 1) brings the scrolled rows back to their top; the rows it passed over would
-            // otherwise stay out of sight.
-            view.scroll.y = 0.0;
-        }
-        if target.col >= geo.fc {
-            if cr.left() < area.left() {
-                view.scroll.x -= (area.left() - cr.left()) / geo.z;
-            } else if cr.right() > area.right() - 2.0 {
-                view.scroll.x += ((cr.right() - area.right() + 2.0) / geo.z).min(cr.left() - area.left());
+            if target.col >= geo.fc {
+                if cr.left() < area.left() {
+                    view.scroll.x -= (area.left() - cr.left()) / geo.z;
+                } else if cr.right() > area.right() - 2.0 {
+                    // Both in sheet units: the cap in screen pixels left a far jump (Cmd+Right to XFD)
+                    // short by the zoom factor, 80% of the way at 100%.
+                    view.scroll.x += ((cr.right() - area.right() + 2.0) / geo.z).min((cr.left() - area.left()) / geo.z);
+                }
+            } else if from.is_some_and(|f| f.col >= geo.fc) {
+                view.scroll.x = 0.0;
             }
-        } else if from.is_some_and(|f| f.col >= geo.fc) {
-            view.scroll.x = 0.0;
+            if extended.is_some_and(|r| r.is_full_cols()) && from.is_some_and(|f| f.row == cell.row) {
+                view.scroll.y = before.y;
+            }
+            if extended.is_some_and(|r| r.is_full_rows()) && from.is_some_and(|f| f.col == cell.col) {
+                view.scroll.x = before.x;
+            }
+            view.scroll = view.scroll.max(egui::Vec2::ZERO);
+            let cells = geo.cells;
+            *geo = (self.make_geo)(app, view.scroll);
+            if geo.cells == cells {
+                break;
+            }
         }
-        if extended.is_some_and(|r| r.is_full_cols()) && from.is_some_and(|f| f.row == cell.row) {
-            view.scroll.y = before.y;
-        }
-        if extended.is_some_and(|r| r.is_full_rows()) && from.is_some_and(|f| f.col == cell.col) {
-            view.scroll.x = before.x;
-        }
-        view.scroll = view.scroll.max(egui::Vec2::ZERO);
-        *geo = (self.make_geo)(app, view.scroll);
     }
 }
 

@@ -1870,3 +1870,31 @@ fn header_footer_dialog_opens_on_the_saved_header_and_footer() {
     let pr = &h.state().session.active().unwrap().wb.active().unwrap().print;
     assert_eq!((pr.header.as_str(), pr.footer.as_str()), ("&CNew", "&CConfidential"));
 }
+
+#[test]
+fn cmd_right_and_down_reach_the_last_column_and_row_and_stay_there() {
+    for zoom in [100, 200, 400] {
+        let mut s = blank();
+        s.execute("view.zoom", json!({"percent": zoom})).unwrap();
+        let mut h = harness(s);
+        let shown = |h: &egui_kittest::Harness<'static, SheetApp>, a1: &str| {
+            let geo = h.state().grid.geo.clone().unwrap();
+            let sh = h.state().session.active().unwrap().wb.active().unwrap();
+            let r = geo.screen_cell_rect(sh, CellRef::parse(a1).unwrap());
+            // A few pixels' slack: the scroll is an f32, which steps by 2 sheet units at the last
+            // row (about 21 million units down), up to 6 px at 400%.
+            let cells = h.state().grid.cells_rect.unwrap().expand(4.0);
+            (cells.contains(r.min) && cells.contains(r.max), r)
+        };
+        for (k, last) in [(Key::ArrowRight, "XFD1"), (Key::ArrowDown, "XFD1048576")] {
+            key(&mut h, k, Modifiers::COMMAND);
+            h.run_steps(2);
+            assert_eq!(h.state().session.active().unwrap().selection.active.a1(), last);
+            let (fits, at) = shown(&h, last);
+            assert!(fits, "{last} is on screen at {zoom}%: {at:?}");
+            // It stays put on later frames (no scrolling back and forth).
+            h.run_steps(4);
+            assert_eq!(shown(&h, last), (true, at), "{last} stays where it is at {zoom}%");
+        }
+    }
+}

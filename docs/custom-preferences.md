@@ -1,6 +1,6 @@
 # Custom preferences (jaredrooprai/gridcraft)
 
-_Last updated: 2026-11-11._
+_Last updated: 2026-11-12._
 
 This fork of GridCraft (`main` on `jaredrooprai/gridcraft`; upstream is `storytold/gridcraft`)
 carries behaviour changes that its owner wants kept. Some deliberately differ from Excel. This
@@ -324,11 +324,34 @@ Tests: `grid::tests::dark_sheet_lightens_ink_that_would_vanish`, and upstream's
 Upstream's `grid::show::trace_arrow_tests` name the light theme's arrow colours, so the fork's copy
 of `lines_in` draws in a light context (`ctx.set_theme(egui::Theme::Light)`).
 
+## 19. Cmd+Right and Cmd+Down reach the sheet's last column and row (bug fix)
+
+A bug fix, not a preference; upstream has no issue for it. Cmd+Right on an empty row selected
+XFD1, but the view stopped about 80% of the way across (around column SJC), and each further move
+scrolled only part of the way, so the cell bounced and was never shown. Three causes, all in
+`crates/ui-egui/src/grid/show.rs`:
+
+- **The scroll toward a cell on the right** (`ActiveCellVisibility::update`) was capped by the
+  cell's distance in screen pixels rather than sheet units. At 100% the grid's scale is 0.8
+  (`DISPLAY_SCALE`), so a far jump went 80% of the way.
+- **The scroll limit** was "column XFD−20 (row 1,048,537) at the pane's start". Zoomed in, fewer
+  lines fit, so the last ones couldn't come into view. The limit is now at least the scroll that
+  shows the last column and row.
+- **The row header widens** for 7-digit row numbers (Cmd+Down to row 1,048,576), pushing the cells
+  right after the visibility check had placed XFD. The check runs a second pass when the cells
+  moved.
+
+Known limit: the scroll is an `f32`, which steps by 2 sheet units at the last row, so that row can
+sit up to a few pixels past the bottom edge at high zoom.
+
+Test: `cmd_right_and_down_reach_the_last_column_and_row_and_stay_there`
+(`crates/ui-egui/tests/it/interaction.rs`, at 100%, 200% and 400%).
+
 ## Merging upstream
 
-Last merged: upstream main at `6dbfbc40` (v0.19.0 plus the craft-update and Harden-Runner
-commits), on 2026-11-11. The previous merge was `2c58c769` (v0.16.0 plus 326 commits) on
-2026-11-08. Things to watch when merging:
+Last merged: upstream main at `37941f06` (v0.19.1 plus the switch of XLS, CSV, OPC and
+encrypted-workbook reading to craft-libs crates), on 2026-11-12. The previous merge was `6dbfbc40`
+(v0.19.0) on 2026-11-11. Things to watch when merging:
 
 - **Big files get split into folders.** Git shows each as one huge conflict. Take upstream's file
   and re-apply the fork's diff (`git diff <merge-base> HEAD -- <file>`) hunk by hunk where the code
