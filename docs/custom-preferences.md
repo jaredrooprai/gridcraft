@@ -369,6 +369,19 @@ sit up to a few pixels past the bottom edge at high zoom.
 Test: `cmd_right_and_down_reach_the_last_column_and_row_and_stay_there`
 (`crates/ui-egui/tests/it/interaction.rs`, at 100%, 200% and 400%).
 
+## 21. Inserting columns or rows past formatting-only cells (bug fix)
+
+A bug fix, not a preference; upstream has no issue for it. Insert Columns (and Insert Rows)
+refused with "cannot shift nonblank cells off of the worksheet" whenever the sheet's used range
+reached the last column, even when the cells there held only formatting. A row once filled out to
+XFD and then cleared at its end (a number format left on XDI:XFD) blocked every column insert. Now
+only cells with content (a value, formula or Python code) in the lines that would be pushed off
+block the insert, as Excel does and as Insert Cells already did; formatting there is dropped.
+
+Where it lived: `check_push_off_sheet` in `crates/engine/src/cmd/sheet.rs`.
+
+Test: `inserting_lines_past_cells_that_only_have_formatting_is_allowed` (`crates/engine/src/tests.rs`).
+
 ## Merging upstream
 
 Last merged: upstream main at `37941f06` (v0.19.1 plus the switch of XLS, CSV, OPC and

@@ -2102,6 +2102,29 @@ fn inserting_a_column_next_to_far_right_data_names_gridcraft_in_the_refusal() {
 }
 
 #[test]
+fn inserting_lines_past_cells_that_only_have_formatting_is_allowed() {
+    // A row filled out to XFD whose last cells hold only a number format (a sheet with a fill
+    // right that ran to the end, then data cleared from its tail).
+    let mut sess = s();
+    sess.execute("cell.set", json!({"cell": "XDH1", "input": "5"})).unwrap();
+    sess.execute("home.bold", json!({"range": "XDI1:XFD1"})).unwrap();
+    sess.execute("cell.set", json!({"cell": "A1048575", "input": "6"})).unwrap();
+    sess.execute("home.bold", json!({"range": "A1048576"})).unwrap();
+    sess.execute("home.insertColumns", json!({"cols": "A:A"})).unwrap();
+    sess.execute("home.insertRows", json!({"rows": "1:1"})).unwrap();
+    let get = |s: &mut Session, a: &str| s.execute("cell.get", json!({"cell": a})).unwrap()["value"].clone();
+    assert_eq!(get(&mut sess, "XDI2"), json!(5.0));
+    assert_eq!(get(&mut sess, "B1048576"), json!(6.0));
+    // Content still isn't pushed off: 48 more columns would move XDI to past XFD.
+    let e = sess.execute("home.insertColumns", json!({"cols": "A:AV"})).unwrap_err();
+    assert!(e.to_string().contains("cannot shift nonblank cells"), "{e}");
+    sess.execute("home.insertColumns", json!({"cols": "A:AU"})).unwrap();
+    assert_eq!(get(&mut sess, "XFD2"), json!(5.0));
+    let e = sess.execute("home.insertRows", json!({"rows": "1:1"})).unwrap_err();
+    assert!(e.to_string().contains("cannot shift nonblank cells"), "{e}");
+}
+
+#[test]
 fn inserting_cells_refuses_to_push_values_off_the_sheet() {
     for (shift, edge, last_fit, last_ok) in [("right", "XFD1", "XFC1", "XFD1"), ("down", "A1048576", "A1048575", "A1048576")] {
         let mut sess = s();

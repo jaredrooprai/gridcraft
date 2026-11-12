@@ -271,12 +271,17 @@ fn inherit_line_format(sh: &mut Sheet, axis: Axis, at: u32, count: u32) {
     }
 }
 
+/// Refuses an insert that would push cells with content off the sheet: those in the last `count`
+/// lines (from `at` on). Cells there with only formatting don't count, as in Excel; the used range
+/// would, and a format filled out to XFD then blocked every column insert.
 fn check_push_off_sheet(s: &Session, sheet: usize, axis: Axis, at: u32, count: u32, limit: u32) -> Result<()> {
-    if let Some(u) = s.doc()?.wb.sheet(sheet).and_then(|sh| sh.used_range()) {
-        let last = if axis == Axis::Rows { u.end.row } else { u.end.col };
-        if last >= at && last as u64 + count as u64 >= limit as u64 {
-            return Err(EngineError::Other("To prevent possible loss of data, GridCraft cannot shift nonblank cells off of the worksheet.".into()));
-        }
+    let first = at.max(limit.saturating_sub(count));
+    if first >= limit {
+        return Ok(());
+    }
+    let doomed = if axis == Axis::Rows { RangeRef::rows(first, limit - 1) } else { RangeRef::cols(first, limit - 1) };
+    if s.doc()?.wb.sheet(sheet).is_some_and(|sh| sh.cells.iter_range(doomed).any(|(_, c)| c.has_content())) {
+        return Err(EngineError::Other("To prevent possible loss of data, GridCraft cannot shift nonblank cells off of the worksheet.".into()));
     }
     Ok(())
 }
