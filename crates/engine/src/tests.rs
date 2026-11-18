@@ -2352,6 +2352,24 @@ fn inserting_lines_past_cells_that_only_have_formatting_is_allowed() {
 }
 
 #[test]
+fn moving_columns_past_cells_that_only_have_formatting_is_allowed() {
+    let mut sess = s();
+    sess.execute("cell.set", json!({"cell": "B1", "input": "b"})).unwrap();
+    sess.execute("cell.set", json!({"cell": "C1", "input": "c"})).unwrap();
+    sess.execute("cell.set", json!({"cell": "XDH1", "input": "5"})).unwrap();
+    sess.execute("home.bold", json!({"range": "XDI1:XFD1"})).unwrap();
+    sess.execute("sheet.moveColumns", json!({"cols": "B:B", "before": 3})).unwrap();
+    assert_eq!(v(&sess, "B1"), Value::Text("c".into()));
+    assert_eq!(v(&sess, "C1"), Value::Text("b".into()));
+    assert_eq!(v(&sess, "XDH1"), Value::Number(5.0));
+    // A value in the last column still blocks the move.
+    sess.execute("cell.set", json!({"cell": "XFD1", "input": "9"})).unwrap();
+    let e = sess.execute("sheet.moveColumns", json!({"cols": "B:B", "before": 3})).unwrap_err();
+    assert!(e.to_string().contains("cannot shift nonblank cells"), "{e}");
+    assert_eq!(v(&sess, "B1"), Value::Text("c".into()));
+}
+
+#[test]
 fn inserting_cells_refuses_to_push_values_off_the_sheet() {
     for (shift, edge, last_fit, last_ok) in [("right", "XFD1", "XFC1", "XFD1"), ("down", "A1048576", "A1048575", "A1048576")] {
         let mut sess = s();

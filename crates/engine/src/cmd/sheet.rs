@@ -424,12 +424,8 @@ fn move_columns(s: &mut Session, p: &Json) -> Result<Json> {
         return Ok(json!({"cols": RangeRef::cols(from, end.saturating_sub(1)).a1()}));
     }
     let sheet = target_sheet(s, p)?;
-    if let Some(u) = s.doc()?.wb.sheet(sheet).and_then(|sh| sh.used_range())
-        && u.end.col >= before
-        && u.end.col as u64 + count as u64 >= MAX_COLS as u64
-    {
-        return Err(EngineError::Other("To prevent possible loss of data, columns cannot be shifted off of the worksheet.".into()));
-    }
+    // The move inserts at `before` first, so the same edge check as Insert Columns applies.
+    check_push_off_sheet(s, sheet, Axis::Cols, before, count, MAX_COLS)?;
     // The checks must authorize the sheet this command modifies, not whatever sheet is active:
     // both get the index `target_sheet` resolved (from `sheet`, or a `Sheet!` range or cell).
     check_lines_protection(s, &json!({"cols": RangeRef::cols(before, before).a1(), "sheet": sheet}), Axis::Cols, before, count, true)?;

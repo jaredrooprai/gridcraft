@@ -377,10 +377,14 @@ reached the last column, even when the cells there held only formatting. A row o
 XFD and then cleared at its end (a number format left on XDI:XFD) blocked every column insert. Now
 only cells with content (a value, formula or Python code) in the lines that would be pushed off
 block the insert, as Excel does and as Insert Cells already did; formatting there is dropped.
+Moving columns by dragging (`sheet.moveColumns`) had the same check, and now uses the same one as
+Insert Columns.
 
-Where it lived: `check_push_off_sheet` in `crates/engine/src/cmd/sheet.rs`.
+Where it lived: `check_push_off_sheet` in `crates/engine/src/cmd/sheet.rs`, called by
+`insert_lines` and `move_columns`.
 
-Test: `inserting_lines_past_cells_that_only_have_formatting_is_allowed` (`crates/engine/src/tests.rs`).
+Tests: `inserting_lines_past_cells_that_only_have_formatting_is_allowed` and
+`moving_columns_past_cells_that_only_have_formatting_is_allowed` (`crates/engine/src/tests.rs`).
 
 ## Merging upstream
 
