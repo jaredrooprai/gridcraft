@@ -1,6 +1,6 @@
 # Custom preferences (jaredrooprai/gridcraft)
 
-_Last updated: 2026-11-12._
+_Last updated: 2026-11-18._
 
 This fork of GridCraft (`main` on `jaredrooprai/gridcraft`; upstream is `storytold/gridcraft`)
 carries behaviour changes that its owner wants kept. Some deliberately differ from Excel. This
@@ -384,9 +384,12 @@ Test: `inserting_lines_past_cells_that_only_have_formatting_is_allowed` (`crates
 
 ## Merging upstream
 
-Last merged: upstream main at `37941f06` (v0.19.1 plus the switch of XLS, CSV, OPC and
-encrypted-workbook reading to craft-libs crates), on 2026-11-12. The previous merge was `6dbfbc40`
-(v0.19.0) on 2026-11-11. Things to watch when merging:
+Last merged: upstream main at `00e8f4fa`, on 2026-11-18. Upstream's tip then was `83ab0167` (the
+switch of the ODS reader to craft-ods), which was left out: on its own it fails clippy (an unused
+`SheetNames::insert` and a useless `Arc::from` in `crates/xlsx`) and 9 of the `ods_tests` in
+`gridcraft-xlsx`. Take it in the next merge once upstream has fixed it. The previous merge was
+`37941f06` (v0.19.1 plus the craft-libs switch for XLS, CSV, OPC and encrypted workbooks) on
+2026-11-12. Things to watch when merging:
 
 - **Big files get split into folders.** Git shows each as one huge conflict. Take upstream's file
   and re-apply the fork's diff (`git diff <merge-base> HEAD -- <file>`) hunk by hunk where the code
@@ -426,7 +429,8 @@ encrypted-workbook reading to craft-libs crates), on 2026-11-12. The previous me
   Zoom dialog (section 8), the Format Painter on release (section 12) and its tooltip in
   `ribbon.rs`. Also `input_to_cell` (section 3), `new_workbook` (section 6), `EditState::is_formula`
   (section 3), the Delete key (section 11), `paint_quadrant` (section 18) and the Format Cells and
-  Zoom imports. In 0.19 upstream's right-to-left text work rewrote `paint_cell` in
+  Zoom imports. On 2026-11-18 upstream gave Cmd+Shift+; nothing to do on a Mac (`Key::Semicolon if
+  !shift`) next to the fork's Cmd+= arm in `ribbon/shortcuts.rs`: keep both. In 0.19 upstream's right-to-left text work rewrote `paint_cell` in
   `grid/quadrant.rs`: keep `let color = sheet_ink(..)` and add upstream's `direction` line after it
   (its new `layout` closure reuses `color`, so #### and repeat fills keep the dark-sheet ink).
 - **Tooltips:** since 0.11 ribbon tooltips get their shortcut from `TOOLTIP_SHORTCUTS` in

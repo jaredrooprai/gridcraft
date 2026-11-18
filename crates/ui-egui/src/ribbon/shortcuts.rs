@@ -73,10 +73,12 @@ pub fn shortcut(app: &mut SheetApp, key: Key, m: Modifiers) {
                 None
             }
         },
-        // The numpad's + arrives as Plus without Shift; Excel takes Ctrl with it as well. This
-        // fork: Cmd+= also inserts when whole rows or columns are selected.
+        // The numpad's + arrives as Plus without Shift; Excel takes Ctrl with it as well. Insert
+        // works on one area at a time, so several areas still go through the dialog. This fork:
+        // Cmd+= also inserts when whole rows or columns are selected.
         Key::Plus | Key::Equals if shift || key == Key::Plus || whole_lines(app).is_some() => insert_lines(app),
-        Key::Semicolon => {
+        // Ctrl+Shift+; (the time) is in `keymap::lookup`; Cmd+Shift+; on a Mac does nothing.
+        Key::Semicolon if !shift => {
             // Insert today's date.
             let text = app
                 .session
